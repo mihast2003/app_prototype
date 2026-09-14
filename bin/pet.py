@@ -139,7 +139,7 @@ class Pet(QWidget): # main logic
         self.mover.set_position(init_pos.x, self.taskbar_top + init_pos.y + 1) # set initial position
 
         init_pos = Vec2(init_pos.x, self.taskbar_top + init_pos.y + 1)
-        self.anchor = init_pos
+        # self.anchor = init_pos
 
         self.position = PetPositionData(
             center               = init_pos,
@@ -618,8 +618,8 @@ class Pet(QWidget): # main logic
             return False
         
         followed = False
-        anchor_x = self.anchor.x
-        anchor_y = self.anchor.y
+        anchor_x = self.position.anchor.x
+        anchor_y = self.position.anchor.y
 
         x1, y1, x2, y2 = rect
         px1, py1, px2, py2 = self.parent_window_rect_last
@@ -648,7 +648,9 @@ class Pet(QWidget): # main logic
                 if anchor_y != y2: dy = y2 - anchor_y
 
         # staying on windows or falling off
-        resize = False
+        resize: bool = False
+        resize_move_x: int
+        resize_move_y: int
 
         if self.stay_on_window_when_resize:
             if self.parent_surface_type == SurfaceNormal.UP or self.parent_surface_type == SurfaceNormal.DOWN:
@@ -669,6 +671,7 @@ class Pet(QWidget): # main logic
             if resize: 
                 self.mover.set_position(anchor_x, anchor_y)  # moving to the edge when resizing
                 self.anchor = Vec2(anchor_x, anchor_y)
+                # self.position.anchor = Vec2(anchor_x, anchor_y)
 
         # if self.RENDER_CONFIG "stay_on_window_when_resize" == False pet should just fall off
         else:
@@ -694,6 +697,7 @@ class Pet(QWidget): # main logic
         self.state_machine.remove_flag(Flag.PARENTED_TO_WINDOW)
         self.parent_window_hwnd = None
         self.parent_surface_type = None
+        self.position.parent_surface_type = None
         self.parent_window_rect_last = None
 
     def _set_parent_window(self, col_x, col_y, surface_data):
@@ -703,7 +707,10 @@ class Pet(QWidget): # main logic
 
         if col_x:  
             self.parent_surface_type = col_x
-        else: self.parent_surface_type = col_y
+            self.position.parent_surface_type = col_x
+        else:
+            self.parent_surface_type = col_y
+            self.position.parent_surface_type = col_y
         # print("surface type:", self.parent_surface_type)
 
         self.parent_window_rect_last = self.windowsOverlay.update_parent_window(hwnd)

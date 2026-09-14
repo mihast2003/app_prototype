@@ -58,7 +58,7 @@ class Mover:
         if y is None and isinstance(x, Vec2):
             self.pos = x
         else:
-            self.pos = Vec2(x, y) #type: ignore
+            self.pos = Vec2(x, y)
         self.vel = Vec2()
         # print("Mover set position at", self.pos.x, self.pos.y)
         self.active = False 

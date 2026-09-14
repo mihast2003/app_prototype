@@ -2,7 +2,7 @@ from dataclasses import dataclass, field
 from typing import NamedTuple
 
 from PySide6.QtGui import QPixmap
-from engine.enums import SurfaceNormal
+from engine.enums import SurfaceNormal, Facing
 from engine.vec2 import Vec2
 
 
@@ -71,6 +71,8 @@ class PetPositionData():
     parent_surface_type: SurfaceNormal | None
     hitbox_width: int
     hitbox_height: int
+
+    facing: Facing = Facing.RIGHT
 
     left:   float = 0
     top:    float = 0
