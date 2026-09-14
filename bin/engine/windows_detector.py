@@ -13,7 +13,7 @@ from ctypes import wintypes
 import win32con
 import time
 
-from engine.enums import SurfaceType
+from engine.enums import SurfaceNormal
 from engine.data_classes import AllSurfacesData, SegmentData
 
 from engine.logger import app_logger as log
@@ -832,7 +832,7 @@ class WindowsOverlay(QWidget):
 
         surfaces = self.surfaces
 
-        if SurfaceType.TOP in collision_mask:  # moving down
+        if SurfaceNormal.UP in collision_mask:  # moving down
             for y, x1, x2, hwnd in surfaces.top:
 
                 if pos_x < x1 or pos_x > x2:   # i replaced R and L with pos.x because we care only about the center point
@@ -842,11 +842,11 @@ class WindowsOverlay(QWidget):
 
                 if 0 <= dist < best:
                     best = dist
-                    collision = SurfaceType.TOP
+                    collision = SurfaceNormal.UP
                     surface_data = (hwnd, y, x1, x2)
                     # print(y, x1, x2)
 
-        if SurfaceType.BOTTOM in collision_mask:  # moving up
+        if SurfaceNormal.DOWN in collision_mask:  # moving up
             for y, x1, x2, hwnd in surfaces.bottom:
 
                 if pos_x < x1 or pos_x > x2:
@@ -856,7 +856,7 @@ class WindowsOverlay(QWidget):
 
                 if best < dist < 0:
                     best = dist
-                    collision = SurfaceType.BOTTOM
+                    collision = SurfaceNormal.DOWN
                     surface_data = (hwnd, y, x1, x2)
                     # print(y, x1, x2)
 
@@ -872,7 +872,7 @@ class WindowsOverlay(QWidget):
 
         surfaces = self.surfaces
 
-        if SurfaceType.LEFT in collision_mask:  # moving right
+        if SurfaceNormal.LEFT in collision_mask:  # moving right
             for x, y1, y2, hwnd in surfaces.left:
 
                 if B < y1 or T > y2:
@@ -882,10 +882,10 @@ class WindowsOverlay(QWidget):
 
                 if 0 <= dist < best:  # here it should be    if best < dist <= 0   for it to work inside-out, this is what should do next
                     best = dist
-                    collision = SurfaceType.LEFT
+                    collision = SurfaceNormal.LEFT
                     surface_data = (hwnd, x, y1, y2)
 
-        if SurfaceType.RIGHT in collision_mask:  # moving left
+        if SurfaceNormal.RIGHT in collision_mask:  # moving left
             for x, y1, y2, hwnd in surfaces.right:
 
                 if B < y1 or T > y2:
@@ -895,7 +895,7 @@ class WindowsOverlay(QWidget):
 
                 if best < dist <= 0:
                     best = dist
-                    collision = SurfaceType.RIGHT
+                    collision = SurfaceNormal.RIGHT
                     surface_data = (hwnd, x, y1, y2)
 
         return best, collision, surface_data

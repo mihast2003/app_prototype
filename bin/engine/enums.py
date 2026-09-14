@@ -33,11 +33,11 @@ class Facing(Enum):
     LEFT = auto()
     RIGHT = auto()
 
-class SurfaceType(Enum):
+class SurfaceNormal(Enum):
     LEFT = auto()
-    TOP = auto()
+    UP = auto()
     RIGHT = auto()
-    BOTTOM = auto()
+    DOWN = auto()
 
 class EmitterType(Enum):
     BURST = auto()

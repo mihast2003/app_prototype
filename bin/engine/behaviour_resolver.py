@@ -1,7 +1,7 @@
 import random
 from PySide6.QtWidgets import QApplication
 
-from engine.enums import MovementType, SurfaceType
+from engine.enums import MovementType, SurfaceNormal
 
 class BehaviourResolver:
     def __init__(self, pet, behaviours):
@@ -101,16 +101,16 @@ class BehaviourResolver:
         # print("cmd_cfg", cmd_cfg)
 
         if cmd_cfg == "all":
-            surfaces.update(SurfaceType.__members__.values())
+            surfaces.update(SurfaceNormal.__members__.values())
             # print("surface types", [type(x) for x in surfaces])
         elif cmd_cfg in {"x", "horizontal"}:
-            surfaces.update([SurfaceType.LEFT, SurfaceType.RIGHT])
+            surfaces.update([SurfaceNormal.LEFT, SurfaceNormal.RIGHT])
         elif cmd_cfg in {"y", "vertical"}:
-            surfaces.update([SurfaceType.TOP, SurfaceType.BOTTOM])
+            surfaces.update([SurfaceNormal.UP, SurfaceNormal.DOWN])
         else:
             cfg = set(cfg) if isinstance(cfg, list) else {cfg}
             for surface in cfg:
-                surfaces.add(SurfaceType.__members__.get(str(surface).upper()))
+                surfaces.add(SurfaceNormal.__members__.get(str(surface).upper()))
 
         # print("surfaces", surfaces)
         return surfaces

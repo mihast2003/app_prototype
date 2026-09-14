@@ -2,8 +2,8 @@
 import time, math, random
 from typing import Any
 from PySide6.QtWidgets import QApplication, QWidget
-from PySide6.QtGui import QPainter
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtGui import QPainter, QPen
+from PySide6.QtCore import Qt, QTimer, QPointF
 
 import json
 import zipfile
@@ -13,7 +13,7 @@ from engine.state_machine import StateMachine
 from engine.click_detector import ClickDetector
 from engine.mover import Mover
 from engine.animator import Animator
-from engine.enums import Flag, Pulse, MovementType, Facing, SurfaceType
+from engine.enums import Flag, Pulse, MovementType, Facing, SurfaceNormal
 from engine.vec2 import Vec2
 from engine.behaviour_resolver import BehaviourResolver
 from engine.windows_detector import WindowsOverlay
@@ -21,7 +21,7 @@ from engine.variable_manager import VariableManager
 from engine.particles.particles_engine_openGL import ParticleOverlayWidget
 from engine.audio_engine import AudioEngine
 
-from engine.data_classes import AnimationData #, AnimationVariant
+from engine.data_classes import AnimationData, PetPositionData
 
 from engine.state_commands import *
 
@@ -137,7 +137,16 @@ class Pet(QWidget): # main logic
         self.taskbar_top = self.primary_screen.availableGeometry().bottom() # Taskbar position detection
         init_pos = Vec2(self.RENDER_CONFIG.get("initial_position", (100, 0)))
         self.mover.set_position(init_pos.x, self.taskbar_top + init_pos.y + 1) # set initial position
-        self.anchor = Vec2(init_pos.x, self.taskbar_top + init_pos.y + 1)
+
+        init_pos = Vec2(init_pos.x, self.taskbar_top + init_pos.y + 1)
+        self.anchor = init_pos
+
+        self.position = PetPositionData(
+            center               = init_pos,
+            parent_surface_type  = None,
+            hitbox_height        = 10,
+            hitbox_width         = 10
+        )
 
         cfg_facing = self.RENDER_CONFIG.get("default_facing")
         self.facing: Facing = Facing.__members__.get(cfg_facing, Facing.RIGHT) # type: ignore  # defining facing direction
@@ -284,7 +293,7 @@ class Pet(QWidget): # main logic
         print("STATE:", state)
         self.current_state = state
         # if self.parent_window_hwnd:
-        #     # print(f"Position: {self.anchor.x}, {self.anchor.y}\nState: {self.current_state}\nParent window: {self.parent_window_hwnd}\nParent window position: {self.parent_window_rect_last}")
+        #     # print(f"Position: {self.position.anchor.x}, {self.position.anchor.y}\nState: {self.current_state}\nParent window: {self.parent_window_hwnd}\nParent window position: {self.parent_window_rect_last}")
 
         cfg: dict = self.STATES[state]
 
@@ -473,10 +482,10 @@ class Pet(QWidget): # main logic
 
             if not followed_parent:
                 # print("checking visible seg")
-                on_visible_segment = self.windowsOverlay.check_parent_window_segment(self.anchor.x, self.anchor.y, self.parent_window_hwnd, self.parent_surface_type)
+                on_visible_segment = self.windowsOverlay.check_parent_window_segment(self.position.anchor.x, self.position.anchor.y, self.parent_window_hwnd, self.parent_surface_type)
                 # print(on_visible_segment)
                 if not on_visible_segment:
-                    print(f"cleared window because was not on visible segment\n{self.anchor.x, self.anchor.y}\nfollowed={followed_parent}, {self.parent_window_rect}")
+                    print(f"cleared window because was not on visible segment\n{self.position.anchor.x, self.position.anchor.y}\nfollowed={followed_parent}, {self.parent_window_rect}")
                     self._clear_parent_window()
 
         t3 = time.perf_counter()
@@ -484,8 +493,8 @@ class Pet(QWidget): # main logic
         # --- updating Mover and collisions ---
         arrived = self.mover.update(dt)
         
-        dx = self.mover.pos.x - self.anchor.x
-        dy = self.mover.pos.y - self.anchor.y
+        dx = self.mover.pos.x - self.position.anchor.x
+        dy = self.mover.pos.y - self.position.anchor.y
 
         col_x, col_y = False, False
         surface_data = None
@@ -493,22 +502,22 @@ class Pet(QWidget): # main logic
         # --- checking for collisions and applying delta ---
         if self.mover.movement_type != MovementType.DRAG and dx != 0:
             # print("arrived", arrived)
-            dx, col_x, surface_data = self.windowsOverlay.collide_horizontal(self.anchor.x, self.anchor.y, dx, collision_mask=self.surface_to_collide_with)
+            dx, col_x, surface_data = self.windowsOverlay.collide_horizontal(self.position.anchor.x, self.position.anchor.y, dx, collision_mask=self.surface_to_collide_with)
 
-        self.anchor.x += dx
+        self.position.anchor.x += dx
 
         if not col_x and self.mover.movement_type != MovementType.DRAG and dy != 0:
-            dy, col_y, surface_data = self.windowsOverlay.collide_vertical(self.anchor.x, self.anchor.y, dy, collision_mask=self.surface_to_collide_with)
+            dy, col_y, surface_data = self.windowsOverlay.collide_vertical(self.position.anchor.x, self.position.anchor.y, dy, collision_mask=self.surface_to_collide_with)
             # print(dy)
         
-        self.anchor.y += dy
+        self.position.anchor.y += dy
         
         # --- if mover reached destination or collision occured - movement finished
         if arrived or col_x or col_y:
             # print("col_x: ", col_x, "self.surfaces: ", self.surfaces_to_parent_to)
             # print("making mover set position cuz", arrived, col_x, col_y)
             # print("if arrived", end="")
-            self.mover.set_position(self.anchor.x, self.anchor.y)
+            self.mover.set_position(self.position.anchor.x, self.position.anchor.y)
             self.click_detector.release()
             self.state_machine.raise_flag(Flag.MOVEMENT_FINISHED)
 
@@ -586,19 +595,19 @@ class Pet(QWidget): # main logic
         self.state_machine.update_apps(app_state)
 
     def _clamp_position_to_screen(self):
-        clamped_x = min(self.primary_screen.availableGeometry().width() - self.hitbox_width / 2, max(self.anchor.x, self.hitbox_width / 2))
-        clamped_y = min(self.primary_screen.geometry().bottom(), max(self.anchor.y, self.hitbox_height))
+        clamped_x = min(self.primary_screen.availableGeometry().width() - self.hitbox_width / 2, max(self.position.anchor.x, self.hitbox_width / 2))
+        clamped_y = min(self.primary_screen.geometry().bottom(), max(self.position.anchor.y, self.hitbox_height))
 
-        if self.anchor.y < self.hitbox_height:
+        if self.position.anchor.y < self.hitbox_height:
             self._clear_parent_window()
 
-        dx = clamped_x - self.anchor.x
-        dy = clamped_y - self.anchor.y
+        dx = clamped_x - self.position.anchor.x
+        dy = clamped_y - self.position.anchor.y
 
         self.mover.move_global(dx,dy)
 
-        self.anchor.x = clamped_x
-        self.anchor.y = clamped_y
+        self.position.anchor.x = clamped_x
+        self.position.anchor.y = clamped_y
 
     def _follow_parent_window(self, rect: tuple|None) -> bool:
         if not self.parent_window_hwnd:
@@ -609,6 +618,8 @@ class Pet(QWidget): # main logic
             return False
         
         followed = False
+        anchor_x = self.anchor.x
+        anchor_y = self.anchor.y
 
         x1, y1, x2, y2 = rect
         px1, py1, px2, py2 = self.parent_window_rect_last
@@ -619,52 +630,53 @@ class Pet(QWidget): # main logic
         global_move_y = (y1 - py1) == (y2 - py2)
 
         match self.parent_surface_type:
-            case SurfaceType.LEFT:
+            case SurfaceNormal.LEFT:
                 if global_move_y: dy = y1 - py1 
                 dx = x1 - px1
-                if self.anchor.x != x1: dx = x1 - self.anchor.x
-            case SurfaceType.TOP:
+                if anchor_x != x1: dx = x1 - anchor_x
+            case SurfaceNormal.UP:
                 if global_move_x: dx = x1 - px1 
                 dy = y1 - py1
-                if self.anchor.y != y1: dy = y1 - self.anchor.y
-            case SurfaceType.RIGHT:
+                if anchor_y != y1: dy = y1 - anchor_y
+            case SurfaceNormal.RIGHT:
                 if global_move_y: dy = y1 - py1 
                 dx = x2 - px2
-                if self.anchor.x != x2: dx = x2 - self.anchor.x
-            case SurfaceType.BOTTOM:
+                if anchor_x != x2: dx = x2 - anchor_x
+            case SurfaceNormal.DOWN:
                 if global_move_x: dx = x1 - px1 
                 dy = y2 - py2
-                if self.anchor.y != y2: dy = y2 - self.anchor.y
+                if anchor_y != y2: dy = y2 - anchor_y
 
         # staying on windows or falling off
         resize = False
 
         if self.stay_on_window_when_resize:
-            if self.parent_surface_type == SurfaceType.TOP or self.parent_surface_type == SurfaceType.BOTTOM:
-                if self.anchor.x < x1 + self.hitbox_width/2:
-                    self.anchor.x = x1 + self.hitbox_width/2
+            if self.parent_surface_type == SurfaceNormal.UP or self.parent_surface_type == SurfaceNormal.DOWN:
+                if anchor_x < x1 + self.hitbox_width/2:
+                    anchor_x = x1 + self.hitbox_width/2
                     resize = True
-                elif self.anchor.x > x2 - self.hitbox_width/2:
-                    self.anchor.x = x2 - self.hitbox_width/2
+                elif anchor_x > x2 - self.hitbox_width/2:
+                    anchor_x = x2 - self.hitbox_width/2
                     resize = True
-            elif self.parent_surface_type == SurfaceType.LEFT or self.parent_surface_type == SurfaceType.RIGHT:
-                if self.anchor.y < y1 + self.hitbox_height:
-                    self.anchor.y = y1 + self.hitbox_height
+            elif self.parent_surface_type == SurfaceNormal.LEFT or self.parent_surface_type == SurfaceNormal.RIGHT:
+                if anchor_y < y1 + self.hitbox_height:
+                    anchor_y = y1 + self.hitbox_height
                     resize = True
-                elif self.anchor.y > y2:
-                    self.anchor.y = y2
+                elif anchor_y > y2:
+                    anchor_y = y2
                     resize = True
             
             if resize: 
-                self.mover.set_position(self.anchor.x, self.anchor.y)  # moving to the edge when resizing
+                self.mover.set_position(anchor_x, anchor_y)  # moving to the edge when resizing
+                self.anchor = Vec2(anchor_x, anchor_y)
 
         # if self.RENDER_CONFIG "stay_on_window_when_resize" == False pet should just fall off
         else:
-            if not global_move_x and self.parent_surface_type in (SurfaceType.TOP, SurfaceType.BOTTOM): # its much nicer to read, i hope its not too bad for performance
-                if self.anchor.x <= x1 - 2 or self.anchor.x >= x2 + 2:
+            if not global_move_x and self.parent_surface_type in (SurfaceNormal.UP, SurfaceNormal.DOWN): # its much nicer to read, i hope its not too bad for performance
+                if anchor_x <= x1 - 2 or anchor_x >= x2 + 2:
                     self._clear_parent_window()
-            if not global_move_y and self.parent_surface_type in (SurfaceType.LEFT, SurfaceType.RIGHT):
-                if self.anchor.y <= y1 - 2 or self.anchor.y >= y2 + 2:
+            if not global_move_y and self.parent_surface_type in (SurfaceNormal.LEFT, SurfaceNormal.RIGHT):
+                if anchor_y <= y1 - 2 or anchor_y >= y2 + 2:
                     self._clear_parent_window()
 
         self.parent_window_rect_last = rect
@@ -704,13 +716,13 @@ class Pet(QWidget): # main logic
 
     def apply_window_position(self):
         self.move(
-            int(self.anchor.x - self.width() / 2),
-            int(self.anchor.y - self.height())
+            int(self.position.anchor.x - self.width() / 2),
+            int(self.position.anchor.y - self.height())
         )
 
     def resize_keep_anchor(self, new_w, new_h):
-        new_x = self.anchor.x - new_w // 2
-        new_y = self.anchor.y - new_h
+        new_x = self.position.anchor.x - new_w // 2
+        new_y = self.position.anchor.y - new_h
         self.setGeometry(new_x, new_y, new_w, new_h)
     
     def update_dpi_and_scale(self, h, initial_state):
@@ -745,6 +757,8 @@ class Pet(QWidget): # main logic
             self.windowsOverlay.update_hitbox(self.hitbox_width, self.hitbox_height)
             self.particle_engine.update_hitbox(self.hitbox_width, self.hitbox_height)
 
+            self.position.update_hitbox(self.hitbox_width, self.hitbox_height)
+
             # print(self.hitbox_height)
             # print(self.hitbox_width)
 
@@ -774,9 +788,10 @@ class Pet(QWidget): # main logic
     def leaveEvent(self, event):
         self.mover.end_drag()  
 
-    # def keyPressEvent(self, e): #doesnt work when app is in background
-    #     if e.key() == Qt.Key.Key_F4:
-    #         print(f"______________________________\n\n  PET REPORT\n\nPosition: {self.anchor.x}, {self.anchor.y}\nState: {self.current_state}\nCurrent behaviour: {self.behaviour_name}\nParent window: {self.parent_window_hwnd}\nParent window position: {self.parent_window_rect_last}\n\n  ^^^.>.\n______________________________")
+    def keyPressEvent(self, e): #doesnt work when app is in background
+        if e.key() == Qt.Key.Key_F4:
+            print(self.position)
+            # print(f"______________________________\n\n  PET REPORT\n\nPosition: {self.position.anchor.x}, {self.position.anchor.y}\nState: {self.current_state}\nCurrent behaviour: {self.behaviour_name}\nParent window: {self.parent_window_hwnd}\nParent window position: {self.parent_window_rect_last}\n\n  ^^^.>.\n______________________________")
     #     elif e.key() == Qt.Key.Key_L:
     #         print("Start debugging")
     #         self.start_debugging = True
@@ -792,10 +807,10 @@ class Pet(QWidget): # main logic
         # p.fillRect(self.rect(), QColor(80, 80, 80))  # dark gray
 
         # draw sprite so its bottom-middle is at (self.x, self.y)
-        anchor_x = self.width() / 2
+        anchor_x = self.width() // 2
         anchor_y = self.height()
 
-        offset_x: int = int(frame.width() / 2)
+        offset_x: int = frame.width() // 2
         offset_y: int = frame.height()
 
         p.save()
@@ -807,13 +822,16 @@ class Pet(QWidget): # main logic
         p.translate(anchor_x, anchor_y)
 
         # draws pets hitbox, pretty neat (says there are problems but works anyway)
-        # p.setPen(QPen(Qt.red, 3))
-        # p.drawRect(-self.hitbox_width/2, -self.hitbox_height, self.hitbox_width, self.hitbox_height)
+        # p.setPen(QPen(Qt.GlobalColor.red, 3))
+        # p.drawRect(int(self.position.left), int(self.position.top), int(self.position.hitbox_width), int(self.position.hitbox_height))
 
-        # p.setPen(QPen(Qt.green, 6))
+        # p.setPen(QPen(Qt.GlobalColor.green, 6))
         # p.drawEllipse(QPointF(0, 0), 2, 2)
 
-        # p.setPen(QPen(Qt.blue, 3))
+        # p.setPen(QPen(Qt.GlobalColor.blue, 6))
+        # p.drawEllipse(QPointF(0, 0), 2, 2)
+
+        # p.setPen(QPen(Qt.GlobalColor.blue, 3))
         # p.drawLine(self.width(), 0, 0, self.height())
         # p.drawLine(offset_x, offset_y, anchor_x, anchor_y)
 
