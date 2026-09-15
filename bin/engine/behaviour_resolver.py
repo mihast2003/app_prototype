@@ -2,14 +2,16 @@ import random
 from PySide6.QtWidgets import QApplication
 
 from engine.enums import MovementType, SurfaceNormal
+from engine.data_classes import PetPositionData
 
 class BehaviourResolver:
-    def __init__(self, pet, behaviours):
+    def __init__(self, pet, pet_position, behaviours: dict):
         self.pet = pet
+        self.pet_position: PetPositionData = pet_position
         self.config = behaviours
 
     def resolve(self, behaviour_name):
-        cfg = self.config.get(behaviour_name)
+        cfg: dict = self.config.get(behaviour_name, {})
         if not cfg:
             raise ValueError(f"Unknown behaviour: {behaviour_name}, check data/behaviours.json")
 
@@ -35,7 +37,7 @@ class BehaviourResolver:
 
     def _resolve_axis(self, axis, spec):
         if spec["type"] == "current":
-            return self.pet.anchor.x if axis == "x" else self.pet.anchor.y
+            return self.pet_position.anchor.x if axis == "x" else self.pet_position.anchor.y
 
         if spec["type"] == "random":
             min_val = self._resolve_bound(spec["min"], axis)
@@ -43,7 +45,7 @@ class BehaviourResolver:
             return random.randint(int(min_val), int(max_val))
         
         if spec["type"] == "random_range":
-            current_pos = self.pet.anchor.x if axis == "x" else self.pet.anchor.y
+            current_pos = self.pet_position.anchor.x if axis == "x" else self.pet_position.anchor.y
             range = spec["range"]
             min_val = self._resolve_bound(spec["min"], axis)
             max_val = self._resolve_bound(spec["max"], axis)
@@ -66,25 +68,25 @@ class BehaviourResolver:
             else: name = name.replace("surface", "screen")
 
             if name == "surface.left":
-                return x1 + self.pet.hitbox_width / 2 #type: ignore
+                return x1 + self.pet_position.hitbox_width / 2 #type: ignore
 
             if name == "surface.right":
-                return x2 - self.pet.hitbox_width / 2 #type: ignore
+                return x2 - self.pet_position.hitbox_width / 2 #type: ignore
             
             if name == "surface.up":
-                return y1 - self.pet.hitbox_height #type: ignore
+                return y1 - self.pet_position.hitbox_height #type: ignore
 
             if name == "surface.down":
-                return y2 - self.pet.hitbox_height #type: ignore
+                return y2 - self.pet_position.hitbox_height #type: ignore
             
         if name == "screen.left":
-            return self.pet.hitbox_width / 2
+            return self.pet_position.hitbox_width / 2
 
         if name == "screen.right":
-            return screen.width() - self.pet.hitbox_width / 2
+            return screen.width() - self.pet_position.hitbox_width / 2
 
         if name == "screen.top":
-            return self.pet.hitbox_height
+            return self.pet_position.hitbox_height
 
         if name == "screen.bottom":
             return screen.height()

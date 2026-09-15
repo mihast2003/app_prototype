@@ -2,7 +2,7 @@
 import time, math, random
 from typing import Any
 from PySide6.QtWidgets import QApplication, QWidget
-from PySide6.QtGui import QPainter, QPen
+from PySide6.QtGui import QPainter, QPen, QPixmap
 from PySide6.QtCore import Qt, QTimer, QPointF
 
 import json
@@ -32,7 +32,7 @@ from engine.logger import debug_logger as debug_log
 
 
 #region --- HELPERS ---
-def scan_animation_bounds(frames: list) -> tuple[int,int]:
+def scan_animation_bounds(frames: list[QPixmap]) -> tuple[int,int]:
     max_w = 0
     max_h = 0
 
@@ -151,11 +151,11 @@ class Pet(QWidget): # main logic
         cfg_facing = self.RENDER_CONFIG.get("default_facing")
         self.facing: Facing = Facing.__members__.get(cfg_facing, Facing.RIGHT) # type: ignore  # defining facing direction
 
-        self.behaviour_resolver = BehaviourResolver(self, BEHAVIOURS)
+        self.behaviour_resolver = BehaviourResolver(self, self.position, BEHAVIOURS)
 
         self.windowsOverlay = WindowsOverlay(self)
 
-        self.particle_engine = ParticleOverlayWidget(pet=self, RENDER_CONFIG=self.RENDER_CONFIG ,ASSETS=ASSETS, PARTICLES=PARTICLES, archive=archive)
+        self.particle_engine = ParticleOverlayWidget(pet_position=self.position, RENDER_CONFIG=self.RENDER_CONFIG ,ASSETS=ASSETS, PARTICLES=PARTICLES, archive=archive)
         self.particle_logic_acc = 0
         self.particle_draw_acc = 0
 
@@ -472,8 +472,8 @@ class Pet(QWidget): # main logic
         if self.parent_window_hwnd:
             rect = self.windowsOverlay.update_parent_window(self.parent_window_hwnd)
 
-            if rect:  self.parent_window_rect = rect
-            else:     self._clear_parent_window()
+            if rect: self.parent_window_rect = rect
+            else: self._clear_parent_window()
 
             # print(self.parent_window_hwnd)
 
@@ -482,11 +482,11 @@ class Pet(QWidget): # main logic
 
             if not followed_parent:
                 # print("checking visible seg")
-                on_visible_segment = self.windowsOverlay.check_parent_window_segment(self.position.anchor.x, self.position.anchor.y, self.parent_window_hwnd, self.parent_surface_type)
+                on_visible_segment = self.windowsOverlay.check_parent_window_segment(self.position, self.parent_window_hwnd, self.parent_surface_type)
                 # print(on_visible_segment)
                 if not on_visible_segment:
-                    print(f"cleared window because was not on visible segment\n{self.position.anchor.x, self.position.anchor.y}\nfollowed={followed_parent}, {self.parent_window_rect}")
                     self._clear_parent_window()
+                    # print(f"cleared window because was not on visible segment\n{self.position.anchor.x, self.position.anchor.y}\nfollowed={followed_parent}, {self.parent_window_rect}")
 
         t3 = time.perf_counter()
 
@@ -502,12 +502,12 @@ class Pet(QWidget): # main logic
         # --- checking for collisions and applying delta ---
         if self.mover.movement_type != MovementType.DRAG and dx != 0:
             # print("arrived", arrived)
-            dx, col_x, surface_data = self.windowsOverlay.collide_horizontal(self.position.anchor.x, self.position.anchor.y, dx, collision_mask=self.surface_to_collide_with)
+            dx, col_x, surface_data = self.windowsOverlay.collide_horizontal(self.position, dx, collision_mask=self.surface_to_collide_with)
 
         self.position.anchor.x += dx
 
         if not col_x and self.mover.movement_type != MovementType.DRAG and dy != 0:
-            dy, col_y, surface_data = self.windowsOverlay.collide_vertical(self.position.anchor.x, self.position.anchor.y, dy, collision_mask=self.surface_to_collide_with)
+            dy, col_y, surface_data = self.windowsOverlay.collide_vertical(self.position, dy, collision_mask=self.surface_to_collide_with)
             # print(dy)
         
         self.position.anchor.y += dy
@@ -525,10 +525,10 @@ class Pet(QWidget): # main logic
                 # if not col_y: col_y = False
                 # print("checking parenting", col_y, "in", self.surfaces_to_parent_to)
                 # print("checking parenting is ", col_y in self.surfaces_to_parent_to)
-                if col_x in self.surfaces_to_parent_to or col_y in self.surfaces_to_parent_to:
-                    self._set_parent_window(col_x, col_y, surface_data)
+                col_surface = col_x if col_x else col_y
+                self._set_parent_window(col_surface, surface_data)
 
-            arrived, col_x, col_y = False, False, False
+            # arrived, col_x, col_y = False, False, False
 
         # print("position is", self.mover.pos.x, self.mover.pos.y)
         # print("facing is", self.facing)
@@ -564,7 +564,6 @@ class Pet(QWidget): # main logic
         if not self.prev_frame_index: self.prev_frame_index = index -  1 # kinda useless but lets keep it for now
 
         if index != self.prev_frame_index or self.mover.movement_type == MovementType.DRAG: 
-            # print("triggering update because", index, self.prev_index)
             self.update()  # repaint
         self.prev_frame_index = index
 
@@ -700,17 +699,14 @@ class Pet(QWidget): # main logic
         self.position.parent_surface_type = None
         self.parent_window_rect_last = None
 
-    def _set_parent_window(self, col_x, col_y, surface_data):
+    def _set_parent_window(self, collision_surface, surface_data):
         hwnd = surface_data[0]
 
         if hwnd == self.windowsOverlay.TASKBAR_HWND: return
+ 
+        self.parent_surface_type = collision_surface
+        self.position.parent_surface_type = collision_surface
 
-        if col_x:  
-            self.parent_surface_type = col_x
-            self.position.parent_surface_type = col_x
-        else:
-            self.parent_surface_type = col_y
-            self.position.parent_surface_type = col_y
         # print("surface type:", self.parent_surface_type)
 
         self.parent_window_rect_last = self.windowsOverlay.update_parent_window(hwnd)
@@ -764,7 +760,7 @@ class Pet(QWidget): # main logic
             self.windowsOverlay.update_hitbox(self.hitbox_width, self.hitbox_height)
             self.particle_engine.update_hitbox(self.hitbox_width, self.hitbox_height)
 
-            self.position.update_hitbox(self.hitbox_width, self.hitbox_height)
+            self.position.set_hitbox(self.hitbox_width, self.hitbox_height)
 
             # print(self.hitbox_height)
             # print(self.hitbox_width)

@@ -3,6 +3,7 @@ import random, math
 from engine.vec2 import Vec2
 
 from engine.enums import EmitterShape
+from engine.data_classes import PetPositionData
 
 class IntProvider():
     def __init__(self, cfg):
@@ -54,15 +55,16 @@ class FloatProvider():
 
 
 class ParticleEmitter:
-    def __init__(self, particleSystem, name, cfg, hitbox_width, hitbox_height):
-
+    def __init__(self, particleSystem, name, cfg, pet: PetPositionData):
         self.particleSystem = particleSystem
 
         self.name = name
-        self.cfg = cfg
+        self.cfg: dict = cfg
 
-        self.hitbox_x = hitbox_width 
-        self.hitbox_y = hitbox_height
+        self.pet = pet
+
+        self.hitbox_x = pet.hitbox_width 
+        self.hitbox_y = pet.hitbox_height
 
         self.time = 0.0
         self.emitted = 0
@@ -73,7 +75,7 @@ class ParticleEmitter:
         shape = cfg.get("emitter_shape")
         self.emitter_shape = EmitterShape.__members__.get(shape, EmitterShape.DOT)
 
-        self.anchor_x, self.anchor_y = self.particleSystem.pet.anchor
+        self.anchor_x, self.anchor_y = self.pet.anchor
 
         self.offset_x = FloatProvider(cfg.get("emitter_offset", (0,0))[0])
         self.offset_y = FloatProvider(cfg.get("emitter_offset", (0,0))[1])
@@ -179,8 +181,8 @@ class ParticleEmitter:
                 pos_x = anchor_x - emitter_offset_x
                 pos_y = anchor_y - emitter_offset_y
             case EmitterShape.LINE:
-                point1 = Vec2(self.cfg.get("point1"))
-                point2 = Vec2(self.cfg.get("point2"))
+                point1 = Vec2(self.cfg.get("point1", (0,0)))
+                point2 = Vec2(self.cfg.get("point2", (0,0)))
                 if not point1 or not point2:
                     print("NO POINTS TO FORM A LINE, CHECK CONFIG")
 
@@ -209,8 +211,8 @@ class ParticleEmitter:
                 pos_y = center_y + r * math.sin(theta)
             
             case EmitterShape.HITBOX:
-                center_x = self.particleSystem.pet.anchor.x - emitter_offset_x
-                center_y = self.particleSystem.pet.anchor.y - emitter_offset_y
+                center_x = self.pet.anchor.x - emitter_offset_x
+                center_y = self.pet.anchor.y - emitter_offset_y
 
                 rand_x = random.random()
                 rand_y = random.random()

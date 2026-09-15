@@ -14,7 +14,7 @@ import win32con
 import time
 
 from engine.enums import SurfaceNormal
-from engine.data_classes import AllSurfacesData, SegmentData
+from engine.data_classes import AllSurfacesData, SegmentData, PetPositionData
 
 from engine.logger import app_logger as log
 from engine.logger import debug_logger as debug_log
@@ -797,20 +797,27 @@ class WindowsOverlay(QWidget):
         L, T, R, B = rect
         return (L / scale, T / scale, R / scale, B / scale)
         
-    def check_parent_window_segment(self, pos_x: float, pos_y: float, hwnd, surface_type) -> bool:
+    def check_parent_window_segment(self, pet: PetPositionData, hwnd, surface_type) -> bool:
         """
         Returns True if pet is on any of the parent_windows' segments
         """
+        buffer = 2
+
         data = self.segments.get(hwnd)
         if not data: return False
 
-        L, T, R, B = data.rect
+        surface_type = pet.parent_surface_type
+        if not surface_type: return False
 
-        buffer = 2
+        pos_x, pos_y = pet.anchor
+
+        # L, T, R, B = data.rect
+
 
         # x must be inside one of the visible top segments
-        if any(x1-buffer <= pos_x <= x2+buffer for x1, x2 in data.top):
-            return True
+        if surface_type == SurfaceNormal.UP:
+            if any(x1-buffer <= pos_x <= x2+buffer for x1, x2 in data.top):
+                return True
 
         return False
 
@@ -823,8 +830,9 @@ class WindowsOverlay(QWidget):
             pos_y
         )
 
-    def collide_vertical(self, pos_x, pos_y, dy, collision_mask):
-        L,T,R,B = self.bounds(pos_x, pos_y)
+    def collide_vertical(self, hitbox: PetPositionData, dy, collision_mask):
+        L,T,R,B = hitbox.get_rect()
+        pos_x, pos_y = hitbox.center
 
         best = dy
         surface_data = None
@@ -863,8 +871,8 @@ class WindowsOverlay(QWidget):
         # print(dy, best, collision)
         return best, collision, surface_data
 
-    def collide_horizontal(self, pos_x, pos_y, dx, collision_mask):
-        L,T,R,B = self.bounds(pos_x, pos_y)
+    def collide_horizontal(self, hitbox: PetPositionData, dx, collision_mask):
+        L,T,R,B = hitbox.get_rect()
 
         best = dx
         surface_data = None

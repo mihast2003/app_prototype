@@ -6,7 +6,6 @@ from engine.enums import SurfaceNormal, Facing
 from engine.vec2 import Vec2
 
 
-
 # @dataclass(slots=True)
 # class AnimationVariant:
 #     frames: list[QPixmap]
@@ -62,6 +61,7 @@ class SegmentData(NamedTuple):
     left: list[tuple]
     right: list[tuple]
 
+
 @dataclass(slots=True)
 class PetPositionData():
     """
@@ -108,8 +108,9 @@ class PetPositionData():
                 return self.anchor_top
 
         return self.center
+        
             
-    def update_hitbox(self, new_width: int, new_height: int):
+    def set_hitbox(self, new_width: int, new_height: int):
         self.hitbox_width = new_width
         self.hitbox_height = new_height
 
@@ -125,14 +126,40 @@ class PetPositionData():
                 offset_x = new_width // 2
             case SurfaceNormal.DOWN:
                 offset_y = new_height // 2
-
-        center_x = self.center.x + offset_x
-        center_y = self.center.y + offset_y
         
-        self.center.x = center_x
-        self.center.y = center_y
+        self.center.x = self.center.x + offset_x
+        self.center.y = self.center.y + offset_y
 
-        self.left = center_x - new_width/2
-        self.top = center_y - new_height/2
-        self.right = center_x + new_width/2
-        self.bottom = center_y + new_height/2
+        self._calculate_bounaries()
+
+
+    def set_position(self, new_x: int, new_y: int, new_parent_surface_type: SurfaceNormal | None = None):
+        offset_x: int = 0
+        offset_y: int = 0
+        self.parent_surface_type = new_parent_surface_type
+
+        match self.parent_surface_type:
+            case SurfaceNormal.LEFT:
+                offset_x = -1 * self.hitbox_width // 2
+            case SurfaceNormal.UP:
+                offset_y = -1 * self.hitbox_height // 2
+            case SurfaceNormal.RIGHT:
+                offset_x = self.hitbox_width // 2
+            case SurfaceNormal.DOWN:
+                offset_y = self.hitbox_height // 2
+
+        self.center.x = new_x + offset_x
+        self.center.y = new_y + offset_y
+
+        self._calculate_bounaries()
+
+
+    def _calculate_bounaries(self):
+        self.left   = self.center.x - self.hitbox_width  /2
+        self.top    = self.center.y - self.hitbox_height /2
+        self.right  = self.center.x + self.hitbox_width  /2
+        self.bottom = self.center.y + self.hitbox_height /2
+
+    def get_rect(self) -> tuple:
+        """Returns L, T, R, B of the hitbox"""
+        return (self.left, self.top, self.right, self.bottom)
