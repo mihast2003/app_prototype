@@ -132,8 +132,16 @@ class PetPositionData():
 
         self._calculate_bounaries()
 
+    def move(self, dx = None, dy = None):
+        if dx:
+            self.center.x += dx
+        if dy:
+            self.center.y += dy
 
-    def set_position(self, new_x: int, new_y: int, new_parent_surface_type: SurfaceNormal | None = None):
+        self._calculate_bounaries()
+
+
+    def set_position(self, new_x: float, new_y: float, new_parent_surface_type: SurfaceNormal | None = None):
         offset_x: int = 0
         offset_y: int = 0
         self.parent_surface_type = new_parent_surface_type
@@ -150,6 +158,26 @@ class PetPositionData():
 
         self.center.x = new_x + offset_x
         self.center.y = new_y + offset_y
+
+        self._calculate_bounaries()
+
+
+    def update(self):
+        offset_x: int = 0
+        offset_y: int = 0
+        
+        match self.parent_surface_type:
+            case SurfaceNormal.LEFT:
+                offset_x = -1 * self.hitbox_width // 2
+            case SurfaceNormal.UP:
+                offset_y = -1 * self.hitbox_height // 2
+            case SurfaceNormal.RIGHT:
+                offset_x = self.hitbox_width // 2
+            case SurfaceNormal.DOWN:
+                offset_y = self.hitbox_height // 2
+
+        self.center.x = self.anchor.x + offset_x
+        self.center.y = self.anchor.y + offset_y
 
         self._calculate_bounaries()
 

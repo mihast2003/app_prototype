@@ -56,8 +56,8 @@
         "settings": {
             "gravity": 700
         },
-        "collide_with_surfaces": "TOP",
-        "parent_to_surfaces": "all"
+        "collide_with_surfaces": "all",
+        "parent_to_surfaces": "TOP"
     },
 
     "JUMP": {

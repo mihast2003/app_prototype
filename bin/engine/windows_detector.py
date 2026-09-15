@@ -830,7 +830,7 @@ class WindowsOverlay(QWidget):
             pos_y
         )
 
-    def collide_vertical(self, hitbox: PetPositionData, dy, collision_mask):
+    def collide_vertical(self, hitbox: PetPositionData, dy, collision_mask: set[SurfaceNormal]):
         L,T,R,B = hitbox.get_rect()
         pos_x, pos_y = hitbox.center
 
@@ -842,6 +842,8 @@ class WindowsOverlay(QWidget):
 
         if SurfaceNormal.UP in collision_mask:  # moving down
             for y, x1, x2, hwnd in surfaces.top:
+
+                print(f"For surface {y, x1, x2} our rect is {pos_x, T, B}")
 
                 if pos_x < x1 or pos_x > x2:   # i replaced R and L with pos.x because we care only about the center point
                     continue
@@ -871,7 +873,7 @@ class WindowsOverlay(QWidget):
         # print(dy, best, collision)
         return best, collision, surface_data
 
-    def collide_horizontal(self, hitbox: PetPositionData, dx, collision_mask):
+    def collide_horizontal(self, hitbox: PetPositionData, dx, collision_mask: set[SurfaceNormal]):
         L,T,R,B = hitbox.get_rect()
 
         best = dx

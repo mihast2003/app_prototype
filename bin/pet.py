@@ -349,8 +349,8 @@ class Pet(QWidget): # main logic
         # print(self.behaviour_name)
         self.behaviour_name = behaviour
         target_x, target_y, type, mover_settings, collision_settings, parenting_settings = self.behaviour_resolver.resolve(self.behaviour_name)
-        self.surface_to_collide_with = collision_settings
-        self.surfaces_to_parent_to = parenting_settings
+        self.surface_to_collide_with: set[SurfaceNormal] = collision_settings
+        self.surfaces_to_parent_to: set[SurfaceNormal] = parenting_settings
 
         if mover_settings: # using mover settings from behaviours first
             acceleration = mover_settings.get("acceleration", self.mover.acceleration)
@@ -492,6 +492,7 @@ class Pet(QWidget): # main logic
 
         # --- updating Mover and collisions ---
         arrived = self.mover.update(dt)
+        self.position.update()
         
         dx = self.mover.pos.x - self.position.anchor.x
         dy = self.mover.pos.y - self.position.anchor.y
@@ -499,22 +500,25 @@ class Pet(QWidget): # main logic
         col_x, col_y = False, False
         surface_data = None
 
+        # print(dy)
+
         # --- checking for collisions and applying delta ---
         if self.mover.movement_type != MovementType.DRAG and dx != 0:
             # print("arrived", arrived)
             dx, col_x, surface_data = self.windowsOverlay.collide_horizontal(self.position, dx, collision_mask=self.surface_to_collide_with)
 
-        self.position.anchor.x += dx
+        self.position.move(dx=dx)
 
         if not col_x and self.mover.movement_type != MovementType.DRAG and dy != 0:
+            # print("coll mask", self.surface_to_collide_with)
             dy, col_y, surface_data = self.windowsOverlay.collide_vertical(self.position, dy, collision_mask=self.surface_to_collide_with)
             # print(dy)
         
-        self.position.anchor.y += dy
+        self.position.move(dy=dy)
         
         # --- if mover reached destination or collision occured - movement finished
         if arrived or col_x or col_y:
-            # print("col_x: ", col_x, "self.surfaces: ", self.surfaces_to_parent_to)
+            # print("col_y: ", col_y, "self.surfaces: ", self.surfaces_to_parent_to)
             # print("making mover set position cuz", arrived, col_x, col_y)
             # print("if arrived", end="")
             self.mover.set_position(self.position.anchor.x, self.position.anchor.y)
@@ -605,6 +609,7 @@ class Pet(QWidget): # main logic
 
         self.mover.move_global(dx,dy)
 
+        self.position.set_position(clamped_x, clamped_y)
         self.position.anchor.x = clamped_x
         self.position.anchor.y = clamped_y
 
@@ -669,8 +674,7 @@ class Pet(QWidget): # main logic
             
             if resize: 
                 self.mover.set_position(anchor_x, anchor_y)  # moving to the edge when resizing
-                self.anchor = Vec2(anchor_x, anchor_y)
-                # self.position.anchor = Vec2(anchor_x, anchor_y)
+                self.position.set_position(anchor_x, anchor_y)
 
         # if self.RENDER_CONFIG "stay_on_window_when_resize" == False pet should just fall off
         else:

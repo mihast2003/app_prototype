@@ -4,6 +4,13 @@ from PySide6.QtWidgets import QApplication
 from engine.enums import MovementType, SurfaceNormal
 from engine.data_classes import PetPositionData
 
+surface_type_to_normal = {
+    "TOP"    : SurfaceNormal.UP,
+    "RIGHT"  : SurfaceNormal.LEFT,
+    "BOTTOM" : SurfaceNormal.DOWN,
+    "LEFT"   : SurfaceNormal.RIGHT,
+}
+
 class BehaviourResolver:
     def __init__(self, pet, pet_position, behaviours: dict):
         self.pet = pet
@@ -20,10 +27,10 @@ class BehaviourResolver:
         mover_settings = cfg.get("settings", {})
 
         collision_cfg = cfg.get("collide_with_surfaces")
-        collision_settings = self._resolve_surfaceType(collision_cfg)
+        collision_settings = self._resolve_surfaceTypes(collision_cfg)
 
         parenting_cfg = cfg.get("parent_to_surfaces")
-        parenting_settings = self._resolve_surfaceType(parenting_cfg)
+        parenting_settings = self._resolve_surfaceTypes(parenting_cfg)
 
         target_cfg = cfg.get("target")
         if not target_cfg:
@@ -31,6 +38,8 @@ class BehaviourResolver:
         
         x = self._resolve_axis("x", target_cfg["x"])
         y = self._resolve_axis("y", target_cfg["y"])
+
+        print(f"Resolving behaviour {behaviour_name}: target {x, y}, movement {movement}\n mover settings {mover_settings}, collision settings {collision_settings} parenting settings {parenting_settings}")
 
         return x, y, movement, mover_settings, collision_settings, parenting_settings
     
@@ -94,8 +103,8 @@ class BehaviourResolver:
 
         raise ValueError(f"Unknown bound: {name}")
 
-    def _resolve_surfaceType(self, cfg):
-        surfaces = set()
+    def _resolve_surfaceTypes(self, cfg) -> set[SurfaceNormal]:
+        surfaces: set[SurfaceNormal] = set() 
 
         if not cfg: return surfaces
 
@@ -111,8 +120,12 @@ class BehaviourResolver:
             surfaces.update([SurfaceNormal.UP, SurfaceNormal.DOWN])
         else:
             cfg = set(cfg) if isinstance(cfg, list) else {cfg}
+            print(f"trying to resolve {cfg}")
             for surface in cfg:
-                surfaces.add(SurfaceNormal.__members__.get(str(surface).upper()))
+                normal = surface_type_to_normal.get(str(surface).upper())
+                print(f"trying to appen {normal}")
+                if normal:
+                    surfaces.add(normal)
 
         # print("surfaces", surfaces)
         return surfaces
