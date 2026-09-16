@@ -14,7 +14,7 @@ import win32con
 import time
 
 from engine.enums import SurfaceNormal
-from engine.data_classes import AllSurfacesData, SegmentData, PetPositionData
+from engine.data_classes import AllSurfacesData, SegmentData, PetTransformData
 
 from engine.logger import app_logger as log
 from engine.logger import debug_logger as debug_log
@@ -625,7 +625,7 @@ class WindowsOverlay(QWidget):
 
         self.taskbar_rect = (
             self.screen_geom.left(),
-            self.screen_avail_geom.bottom() + 1,
+            self.screen_avail_geom.bottom(),
             self.screen_geom.right(),
             self.screen_geom.bottom()
         )
@@ -797,7 +797,7 @@ class WindowsOverlay(QWidget):
         L, T, R, B = rect
         return (L / scale, T / scale, R / scale, B / scale)
         
-    def check_parent_window_segment(self, pet: PetPositionData, hwnd, surface_type) -> bool:
+    def check_parent_window_segment(self, pet: PetTransformData, hwnd, surface_type) -> bool:
         """
         Returns True if pet is on any of the parent_windows' segments
         """
@@ -830,20 +830,20 @@ class WindowsOverlay(QWidget):
             pos_y
         )
 
-    def collide_vertical(self, hitbox: PetPositionData, dy, collision_mask: set[SurfaceNormal]):
+    def collide_vertical(self, hitbox: PetTransformData, dy, collision_mask: set[SurfaceNormal]):
         L,T,R,B = hitbox.get_rect()
         pos_x, pos_y = hitbox.center
 
         best = dy
         surface_data = None
-        collision = False
+        collision: SurfaceNormal | None = None
 
         surfaces = self.surfaces
 
         if SurfaceNormal.UP in collision_mask:  # moving down
             for y, x1, x2, hwnd in surfaces.top:
 
-                print(f"For surface {y, x1, x2} our rect is {pos_x, T, B}")
+                # print(f"For surface y {y} and x1, x2 {x1, x2} our rect is {pos_x, T, B}")
 
                 if pos_x < x1 or pos_x > x2:   # i replaced R and L with pos.x because we care only about the center point
                     continue
@@ -873,12 +873,12 @@ class WindowsOverlay(QWidget):
         # print(dy, best, collision)
         return best, collision, surface_data
 
-    def collide_horizontal(self, hitbox: PetPositionData, dx, collision_mask: set[SurfaceNormal]):
+    def collide_horizontal(self, hitbox: PetTransformData, dx, collision_mask: set[SurfaceNormal]):
         L,T,R,B = hitbox.get_rect()
 
         best = dx
         surface_data = None
-        collision = False
+        collision: SurfaceNormal | None = None
 
         surfaces = self.surfaces
 

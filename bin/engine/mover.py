@@ -54,10 +54,10 @@ class Mover:
         self.jump_velocity = jump_velocity
         self.gravity = gravity
 
-    def set_position(self, x=0.0, y=None):
+    def set_position(self, x: float | Vec2 = 0.0, y: float | None =None):
         if y is None and isinstance(x, Vec2):
             self.pos = x
-        else:
+        elif  isinstance(x, float):
             self.pos = Vec2(x, y)
         self.vel = Vec2()
         # print("Mover set position at", self.pos.x, self.pos.y)

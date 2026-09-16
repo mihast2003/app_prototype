@@ -8,7 +8,7 @@ import zipfile
 
 from engine.asset_loader import AssetLoader
 from engine.particles.particle_emitter import ParticleEmitter
-from engine.data_classes import PetPositionData
+from engine.data_classes import PetTransformData
 
 from OpenGL.GL import * #type: ignore
 
@@ -39,7 +39,7 @@ def get_frame_index(anim, age):
 
 #widget drawing particles, fullscreen transparent to clicks
 class ParticleOverlayWidget(QOpenGLWidget):
-    def __init__(self, pet_position: PetPositionData, RENDER_CONFIG, ASSETS, PARTICLES, archive: zipfile.ZipFile):
+    def __init__(self, pet_position: PetTransformData, RENDER_CONFIG, ASSETS, PARTICLES, archive: zipfile.ZipFile):
         self.ASSETS = ASSETS
         self.PARTICLES = PARTICLES
         self.RENDER_CONFIG = RENDER_CONFIG
@@ -368,8 +368,8 @@ class ParticleOverlayWidget(QOpenGLWidget):
         # print("( particles \"dirt\"", self.particles_by_type["dirt"], ", time spent", time.perf_counter() - t0, ")") # for debugging
    
     def offset_geometry(self):
-        r = self.geometry()
-        self.setGeometry(r.x(), r.y(), r.width()+1, r.height())
+        g = self.geometry()
+        self.setGeometry(g.x(), g.y(), g.width()+1, g.height())
 
     # --- DRAWING ---
     def draw(self):

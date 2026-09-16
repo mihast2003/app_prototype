@@ -3,7 +3,7 @@ import random, math
 from engine.vec2 import Vec2
 
 from engine.enums import EmitterShape
-from engine.data_classes import PetPositionData
+from engine.data_classes import PetTransformData
 
 class IntProvider():
     def __init__(self, cfg):
@@ -55,7 +55,7 @@ class FloatProvider():
 
 
 class ParticleEmitter:
-    def __init__(self, particleSystem, name, cfg, pet: PetPositionData):
+    def __init__(self, particleSystem, name, cfg, pet: PetTransformData):
         self.particleSystem = particleSystem
 
         self.name = name

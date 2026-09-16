@@ -2,7 +2,7 @@ import random
 from PySide6.QtWidgets import QApplication
 
 from engine.enums import MovementType, SurfaceNormal
-from engine.data_classes import PetPositionData
+from engine.data_classes import PetTransformData
 
 surface_type_to_normal = {
     "TOP"    : SurfaceNormal.UP,
@@ -14,7 +14,7 @@ surface_type_to_normal = {
 class BehaviourResolver:
     def __init__(self, pet, pet_position, behaviours: dict):
         self.pet = pet
-        self.pet_position: PetPositionData = pet_position
+        self.pet_position: PetTransformData = pet_position
         self.config = behaviours
 
     def resolve(self, behaviour_name):
@@ -120,10 +120,8 @@ class BehaviourResolver:
             surfaces.update([SurfaceNormal.UP, SurfaceNormal.DOWN])
         else:
             cfg = set(cfg) if isinstance(cfg, list) else {cfg}
-            print(f"trying to resolve {cfg}")
             for surface in cfg:
                 normal = surface_type_to_normal.get(str(surface).upper())
-                print(f"trying to appen {normal}")
                 if normal:
                     surfaces.add(normal)
 

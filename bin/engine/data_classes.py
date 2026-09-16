@@ -63,7 +63,7 @@ class SegmentData(NamedTuple):
 
 
 @dataclass(slots=True)
-class PetPositionData():
+class PetTransformData():
     """
     Contains the center and anchor positions
     """
@@ -138,6 +138,8 @@ class PetPositionData():
         if dy:
             self.center.y += dy
 
+        # print("moving to", self.center.x, self.center.y)
+
         self._calculate_bounaries()
 
 
@@ -158,6 +160,8 @@ class PetPositionData():
 
         self.center.x = new_x + offset_x
         self.center.y = new_y + offset_y
+
+        # print("set position at", self.center.x, self.center.y, new_parent_surface_type)
 
         self._calculate_bounaries()
 
@@ -187,6 +191,8 @@ class PetPositionData():
         self.top    = self.center.y - self.hitbox_height /2
         self.right  = self.center.x + self.hitbox_width  /2
         self.bottom = self.center.y + self.hitbox_height /2
+
+        # print("boundaries are", self.get_rect())
 
     def get_rect(self) -> tuple:
         """Returns L, T, R, B of the hitbox"""
