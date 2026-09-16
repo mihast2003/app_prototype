@@ -106,8 +106,8 @@ class PetTransformData():
                 return self.anchor_left
             case SurfaceNormal.DOWN:
                 return self.anchor_top
-
-        return self.center
+            case None:
+                return self.center
         
             
     def set_hitbox(self, new_width: int, new_height: int):
@@ -161,7 +161,7 @@ class PetTransformData():
         self.center.x = new_x + offset_x
         self.center.y = new_y + offset_y
 
-        # print("set position at", self.center.x, self.center.y, new_parent_surface_type)
+        print("set position at", self.center.x, self.center.y, new_parent_surface_type)
 
         self._calculate_bounaries()
 
@@ -192,7 +192,7 @@ class PetTransformData():
         self.right  = self.center.x + self.hitbox_width  /2
         self.bottom = self.center.y + self.hitbox_height /2
 
-        # print("boundaries are", self.get_rect())
+        print("boundaries are", self.get_rect())
 
     def get_rect(self) -> tuple:
         """Returns L, T, R, B of the hitbox"""

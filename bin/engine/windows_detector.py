@@ -834,7 +834,7 @@ class WindowsOverlay(QWidget):
         L,T,R,B = hitbox.get_rect()
         pos_x, pos_y = hitbox.center
 
-        best = dy
+        best: float = dy
         surface_data = None
         collision: SurfaceNormal | None = None
 
@@ -876,7 +876,7 @@ class WindowsOverlay(QWidget):
     def collide_horizontal(self, hitbox: PetTransformData, dx, collision_mask: set[SurfaceNormal]):
         L,T,R,B = hitbox.get_rect()
 
-        best = dx
+        best: float = dx
         surface_data = None
         collision: SurfaceNormal | None = None
 

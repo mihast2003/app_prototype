@@ -144,6 +144,8 @@ class Pet(QWidget): # main logic
         self.mover.set_position(init_pos) # set initial position
         # self.anchor = init_pos
 
+        self.parent_surface_type = None
+
         self.transform = PetTransformData(
             center               = init_pos,
             parent_surface_type  = None,
@@ -308,6 +310,7 @@ class Pet(QWidget): # main logic
         self._resolve_behavior(next_behaviour, cfg)
 
         if self.mover.movement_type == MovementType.DRAG and self.parent_window_hwnd:
+            # print("clear parent cuz drag")
             self._clear_parent_window()
 
         # isAbletoRotate = True if self.mover.movement_type == MovementType.DRAG else False   # not used anymore but maybe later
@@ -476,7 +479,7 @@ class Pet(QWidget): # main logic
         self.parent_window_rect = None
         followed_parent = False
 
-        if self.parent_window_hwnd:
+        if self.parent_window_hwnd and self.parent_window_hwnd != self.windowsOverlay.TASKBAR_HWND:
             rect = self.windowsOverlay.update_parent_window(self.parent_window_hwnd)
 
             if rect: self.parent_window_rect = rect
@@ -492,7 +495,7 @@ class Pet(QWidget): # main logic
                 # print(on_visible_segment)
                 if not on_visible_segment:
                     self._clear_parent_window()
-                    # print(f"cleared window because was not on visible segment\n{self.position.anchor.x, self.position.anchor.y}\nfollowed={followed_parent}, {self.parent_window_rect}")
+                    print(f"cleared window because was not on visible segment\n{self.transform.anchor.x, self.transform.anchor.y}\nfollowed={followed_parent}, {self.parent_window_rect}")
 
         t3 = time.perf_counter()
 
@@ -509,8 +512,6 @@ class Pet(QWidget): # main logic
         col_x, col_y = None, None
         surface_data = None
 
-        # print(dy)
-
         # --- checking for collisions and applying delta ---
         if self.mover.movement_type != MovementType.DRAG and dx != 0:
             # print("arrived", arrived)
@@ -521,7 +522,6 @@ class Pet(QWidget): # main logic
             self.transform.move(dx=dx)
 
         if not col_x and self.mover.movement_type != MovementType.DRAG and dy != 0:
-            # print("coll mask", self.surface_to_collide_with)
             dy, col_y, surface_data = self.windowsOverlay.collide_vertical(self.transform, dy, collision_mask=self.surface_to_collide_with)
             # print(dy)
         
@@ -716,22 +716,24 @@ class Pet(QWidget): # main logic
         self.parent_window_hwnd = None
         self.parent_surface_type = None
         self.transform.parent_surface_type = None
+        print("CLEARED PARENT WINDOW")
         self.parent_window_rect_last = None
 
     def _set_parent_window(self, collision_surface: SurfaceNormal | None, surface_data):
         hwnd = surface_data[0]
 
-        if hwnd == self.windowsOverlay.TASKBAR_HWND: return
- 
         self.parent_surface_type = collision_surface
         self.transform.parent_surface_type = collision_surface
-
-        # print("surface type:", self.parent_surface_type)
-
-        self.parent_window_rect_last = self.windowsOverlay.update_parent_window(hwnd)
+        print("surface normal", self.parent_surface_type)
 
         self.parent_window_hwnd = hwnd
         self.state_machine.pulse(Pulse.GAINED_PARENT)
+
+        if hwnd == self.windowsOverlay.TASKBAR_HWND: 
+            return
+
+        self.parent_window_rect_last = self.windowsOverlay.update_parent_window(hwnd)
+
         self.state_machine.raise_flag(Flag.PARENTED_TO_WINDOW)
         self.state_machine.remove_flag(Flag.NOT_PARENTED_TO_WINDOW)
         # print("Parent window:", hwnd)
@@ -826,32 +828,45 @@ class Pet(QWidget): # main logic
         p = QPainter(self)
         p.setRenderHint(QPainter.SmoothPixmapTransform, True) # pyright: ignore[reportAttributeAccessIssue]
 
-        # p.fillRect(self.rect(), QColor(80, 80, 80))  # dark gray
-
-        # draw sprite so its center is at (self.transform.center.x, self.transform.center.y)
         scale = self.scale
 
-        center_x = self.transform.center.x
-        center_y = self.transform.center.y
+        anchor_x = self.transform.anchor.x
+        anchor_y = self.transform.anchor.y
 
-        scaled_w = frame.width() * scale
-        scaled_h = frame.height() * scale
-
-        pos_x = center_x - scaled_w / 2
-        pos_y = center_y - scaled_h / 2
+        width = frame.width()
+        height = frame.height()
 
         p.save()
+
+        p.translate(anchor_x, anchor_y)
 
         sx = scale
         if self.facing == Facing.LEFT:
             sx *= -1
 
+        # Rotation around transform.center + drag_offset
+        if self.rotation_angle != 0:
+            cx = self.drag_offset.x
+            cy = self.drag_offset.y
+            p.translate(cx, cy)
+            p.setPen(QPen(Qt.GlobalColor.green, 6))
+            p.drawEllipse(QPointF(0, 0), 2, 2)
+            p.rotate(self.rotation_angle)
+            p.translate(-cx, -cy)
+
+        p.scale(sx, self.scale)
+
+        p.drawPixmap(int(-width/2), int(-height), frame)
+
+        p.restore()
+
+
         # draws pets hitbox, pretty neat (says there are problems but works anyway)
         p.setPen(QPen(Qt.GlobalColor.red, 6))
         p.drawRect(int(self.transform.left), int(self.transform.top), int(self.transform.hitbox_width), int(self.transform.hitbox_height))
 
-        p.setPen(QPen(Qt.GlobalColor.green, 6))
-        p.drawEllipse(QPointF(0, 0), 2, 2)
+        # p.setPen(QPen(Qt.GlobalColor.green, 6))
+        # p.drawEllipse(QPointF(0, 0), 2, 2)
  
         # p.setPen(QPen(Qt.GlobalColor.blue, 6))
         # p.drawEllipse(QPointF(0, 0), 2, 2)
@@ -863,24 +878,23 @@ class Pet(QWidget): # main logic
         # p.translate(anchor_x, anchor_y)
 
 
-        if self.rotation_angle != 0:
-            cx = center_x + self.drag_offset.x
-            cy = center_y + self.drag_offset.y
-            p.translate(cx, cy)
-            p.rotate(self.rotation_angle)
-            p.translate(-cx, -cy)
+        # if self.rotation_angle != 0:
+        #     cx = center_x + self.drag_offset.x
+        #     cy = center_y + self.drag_offset.y
+        #     p.translate(cx, cy)
+        #     p.rotate(self.rotation_angle)
+        #     p.translate(-cx, -cy)
 
         # p.scale(sx, self.scale)
         # p.drawPixmap(int(pos_x), int(pos_y), frame)
 
-        p.drawPixmap(
-            QRectF(pos_x, pos_y, scaled_w, scaled_h),
-            frame,
-            QRectF(frame.rect())
-        )
+        # p.drawPixmap(
+        #     QRectF(pos_x, pos_y, scaled_w, scaled_h),
+        #     frame,
+        #     QRectF(frame.rect())
+        # )
 
-
-        p.restore()
+        # p.restore()
 
     def recall(self):
         self.particle_engine.clear_screen()
