@@ -122,17 +122,8 @@ class Pet(QWidget): # main logic
         self.not_first_time_update: bool = False
         # self.start_debugging = False
 
-        self.hitbox_width = 0
-        self.hitbox_height = 0
-
-        self.parent_window_hwnd: int|None = None
-        self.parent_window_rect_last = None
-
-        self.stay_on_window_when_resize = self.RENDER_CONFIG.get("stay_on_window_when_resize", False) 
-
-        self.mover = Mover(self)
-        self.mover.reset_settings(self.RENDER_CONFIG) # needs to be done immediately to apply settings
-
+        # self.hitbox_width = 0
+        # self.hitbox_height = 0
         self.primary_screen = QApplication.primaryScreen()
         self.taskbar_top = self.primary_screen.availableGeometry().bottom() # Taskbar position detection
 
@@ -140,10 +131,11 @@ class Pet(QWidget): # main logic
 
         init_pos = Vec2(self.RENDER_CONFIG.get("initial_position", (100, 0)))
         init_pos = Vec2(init_pos.x, self.taskbar_top + init_pos.y)
-        
-        self.mover.set_position(init_pos) # set initial position
-        # self.anchor = init_pos
-        self.parent_surface_type = None
+
+        self.parent_window_hwnd: int|None = None
+        self.parent_window_rect_last = None
+
+        self.stay_on_window_when_resize = self.RENDER_CONFIG.get("stay_on_window_when_resize", False) 
 
         init_surface_normal_cfg = self.RENDER_CONFIG.get("initial_surface_normal", None)
         if init_surface_normal_cfg:
@@ -156,6 +148,14 @@ class Pet(QWidget): # main logic
             hitbox_width         = 10
         )
         self.transform.set_position(init_pos.x, init_pos.y, self.parent_surface_type)
+
+        self.mover = Mover(pet=self, pet_transform=self.transform)
+        self.mover.reset_settings(self.RENDER_CONFIG) # needs to be done immediately to apply settings
+        self.mover.set_position(init_pos) # set initial position
+
+    
+        # self.anchor = init_pos
+        self.parent_surface_type = None
 
         cfg_facing = self.RENDER_CONFIG.get("default_facing")
         self.facing: Facing = Facing.__members__.get(cfg_facing, Facing.RIGHT) # type: ignore  # defining facing direction
@@ -413,7 +413,9 @@ class Pet(QWidget): # main logic
             return
 
         # print("on state change", end="")
-        self.mover.move_to(target_x, target_y, type)
+        new_facing, should_clear_parent_window = self.mover.process_movementtype(target_x, target_y, type)
+        self.facing = new_facing
+        if should_clear_parent_window: self._clear_parent_window()
 
     def _resolve_animation(self, animation_cfg: str | list[list]) -> str:
         if isinstance(animation_cfg, str):
@@ -627,8 +629,10 @@ class Pet(QWidget): # main logic
         self.state_machine.update_apps(app_state)
 
     def _clamp_position_to_screen(self):
-        clamped_x = min(self.primary_screen.availableGeometry().width() - self.hitbox_width / 2, max(self.transform.anchor.x, self.hitbox_width / 2))
-        clamped_y = min(self.primary_screen.geometry().bottom(), max(self.transform.anchor.y, self.hitbox_height))
+        hitbox_width  = self.transform.hitbox_width
+        hitbox_height  = self.transform.hitbox_height
+        clamped_x = min(self.primary_screen.availableGeometry().width() - hitbox_width / 2, max(self.transform.anchor.x, hitbox_width / 2))
+        clamped_y = min(self.primary_screen.geometry().bottom(), max(self.transform.anchor.y, hitbox_height))
 
         if self.transform.top < 0:
             print("clamping clearing")
@@ -659,6 +663,9 @@ class Pet(QWidget): # main logic
         followed = False
         anchor_x = self.transform.anchor.x
         anchor_y = self.transform.anchor.y
+
+        hitbox_width  =  self.transform.hitbox_width
+        hitbox_height =  self.transform.hitbox_height
 
         x1, y1, x2, y2 = rect
         px1, py1, px2, py2 = self.parent_window_rect_last
@@ -693,15 +700,15 @@ class Pet(QWidget): # main logic
 
         if self.stay_on_window_when_resize:
             if self.parent_surface_type == SurfaceNormal.UP or self.parent_surface_type == SurfaceNormal.DOWN:
-                if anchor_x < x1 + self.hitbox_width/2:
-                    anchor_x = x1 + self.hitbox_width/2
+                if anchor_x < x1 + hitbox_width/2:
+                    anchor_x = x1 + hitbox_width/2
                     resize = True
-                elif anchor_x > x2 - self.hitbox_width/2:
-                    anchor_x = x2 - self.hitbox_width/2
+                elif anchor_x > x2 - hitbox_width/2:
+                    anchor_x = x2 - hitbox_width/2
                     resize = True
             elif self.parent_surface_type == SurfaceNormal.LEFT or self.parent_surface_type == SurfaceNormal.RIGHT:
-                if anchor_y < y1 + self.hitbox_height:
-                    anchor_y = y1 + self.hitbox_height
+                if anchor_y < y1 + hitbox_height:
+                    anchor_y = y1 + hitbox_height
                     resize = True
                 elif anchor_y > y2:
                     anchor_y = y2
@@ -791,13 +798,13 @@ class Pet(QWidget): # main logic
             if not frame:
                 frame = self.animator.get_frame()
                       
-            self.hitbox_width = frame.width() * self.scale
-            self.hitbox_height = frame.height() * self.scale
+            hitbox_width = frame.width() * self.scale
+            hitbox_height = frame.height() * self.scale
 
-            self.windowsOverlay.update_hitbox(self.hitbox_width, self.hitbox_height)
-            self.particle_engine.update_hitbox(self.hitbox_width, self.hitbox_height)
+            self.windowsOverlay.update_hitbox(hitbox_width, hitbox_height)
+            self.particle_engine.update_hitbox(hitbox_width, hitbox_height)
 
-            self.transform.set_hitbox(int(self.hitbox_width), int(self.hitbox_height))
+            self.transform.set_hitbox(int(hitbox_width), int(hitbox_height))
 
             # print(self.hitbox_height)
             # print(self.hitbox_width)

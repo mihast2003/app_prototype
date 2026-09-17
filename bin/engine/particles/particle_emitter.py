@@ -55,16 +55,16 @@ class FloatProvider():
 
 
 class ParticleEmitter:
-    def __init__(self, particleSystem, name, cfg, pet: PetTransformData):
+    def __init__(self, particleSystem, name, cfg, pet_transform: PetTransformData):
         self.particleSystem = particleSystem
 
         self.name = name
         self.cfg: dict = cfg
 
-        self.pet = pet
+        self.pet = pet_transform
 
-        self.hitbox_x = pet.hitbox_width 
-        self.hitbox_y = pet.hitbox_height
+        self.hitbox_x = pet_transform.hitbox_width 
+        self.hitbox_y = pet_transform.hitbox_height
 
         self.time = 0.0
         self.emitted = 0

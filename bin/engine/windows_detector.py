@@ -595,7 +595,7 @@ class WindowsOverlay(QWidget):
         except Exception as e:
             log.warning(f"Windows hooks could not be installed.\n{e}")
 
-        self.update_hitbox(pet.hitbox_width, pet.hitbox_height)
+        self.update_hitbox(pet.transform.hitbox_width, pet.transform.hitbox_height)
 
         screen = QApplication.primaryScreen()
         self.screen_geom = screen.geometry()

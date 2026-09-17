@@ -299,7 +299,7 @@ class ParticleOverlayWidget(QOpenGLWidget):
         
         # print(f"Adding emitter:\n   Name: {name}, \n   cfg: {cfg}")
 
-        new_emitter = ParticleEmitter(particleSystem=self, name=name, cfg=cfg, pet=self.pet_position)
+        new_emitter = ParticleEmitter(particleSystem=self, name=name, cfg=cfg, pet_transform=self.pet_position)
 
         if constant:
             self.constant_emitters.append(new_emitter)
