@@ -139,19 +139,23 @@ class Pet(QWidget): # main logic
         print("taskbar_top is", self.taskbar_top)
 
         init_pos = Vec2(self.RENDER_CONFIG.get("initial_position", (100, 0)))
-        init_pos = Vec2(init_pos.x, self.taskbar_top + init_pos.y + 1)
+        init_pos = Vec2(init_pos.x, self.taskbar_top + init_pos.y)
         
         self.mover.set_position(init_pos) # set initial position
         # self.anchor = init_pos
-
         self.parent_surface_type = None
 
+        init_surface_normal_cfg = self.RENDER_CONFIG.get("initial_surface_normal", None)
+        if init_surface_normal_cfg:
+            self.parent_surface_type = SurfaceNormal.__members__.get(init_surface_normal_cfg, None)
+            
         self.transform = PetTransformData(
             center               = init_pos,
             parent_surface_type  = None,
             hitbox_height        = 10,
             hitbox_width         = 10
         )
+        self.transform.set_position(init_pos.x, init_pos.y, self.parent_surface_type)
 
         cfg_facing = self.RENDER_CONFIG.get("default_facing")
         self.facing: Facing = Facing.__members__.get(cfg_facing, Facing.RIGHT) # type: ignore  # defining facing direction
@@ -463,6 +467,8 @@ class Pet(QWidget): # main logic
 
         self.total_time_active += dt
 
+        # print("\n")
+
         # if self.start_debugging:
         #     self.profiler.disable()
         #     self.profiler.enable()  # start profiling
@@ -479,6 +485,9 @@ class Pet(QWidget): # main logic
         self.parent_window_rect = None
         followed_parent = False
 
+        # print("transform center before follow is", self.transform.center)
+        # print("transform parent_type before follow is", self.transform.parent_surface_type)
+
         if self.parent_window_hwnd and self.parent_window_hwnd != self.windowsOverlay.TASKBAR_HWND:
             rect = self.windowsOverlay.update_parent_window(self.parent_window_hwnd)
 
@@ -488,6 +497,8 @@ class Pet(QWidget): # main logic
 
             followed_parent = self._follow_parent_window(self.parent_window_rect)
             # print("followed_parent:", followed_parent)
+
+            # print("transform center after follow is", self.transform.center)
 
             if not followed_parent:
                 # print("checking visible seg")
@@ -527,28 +538,35 @@ class Pet(QWidget): # main logic
         
         if dy != 0:
             self.transform.move(dy=dy)
+
+        # print("transform center start is", self.transform.center)
         
         # --- if mover reached destination or collision occured - movement finished
         if arrived or col_x or col_y:
             print("col_y: ", col_y, "self.surfaces: ", self.surfaces_to_parent_to)
             print("making mover set position cuz", arrived, col_x, col_y)
             print("if arrived", end="")
-            self.mover.set_position(self.transform.anchor.x, self.transform.anchor.y)
-            self.click_detector.release()
-            self.state_machine.raise_flag(Flag.MOVEMENT_FINISHED)
+            print("transform center is", self.transform.center)
 
             if surface_data:
-                # if not col_y: col_y = False
                 # print("checking parenting", col_y, "in", self.surfaces_to_parent_to)
                 # print("checking parenting is ", col_y in self.surfaces_to_parent_to)
                 col_surface = col_x if col_x else col_y
+                # print("transform center 3 is", self.transform.center)
                 self._set_parent_window(col_surface, surface_data)
+                # print("transform center 4 is", self.transform.center)
+
+            self.mover.set_position(self.transform.anchor.x, self.transform.anchor.y)
+            self.click_detector.release()
+            self.state_machine.raise_flag(Flag.MOVEMENT_FINISHED)
 
             # arrived, col_x, col_y = False, False, False
 
         # print("position is", self.mover.pos.x, self.mover.pos.y)
         # print("facing is", self.facing)
         t5 = time.perf_counter()
+
+        # print("transform center5 is", self.transform.center)
 
         transition_data, commands = self.state_machine.update(dt)
         if transition_data:
@@ -612,7 +630,8 @@ class Pet(QWidget): # main logic
         clamped_x = min(self.primary_screen.availableGeometry().width() - self.hitbox_width / 2, max(self.transform.anchor.x, self.hitbox_width / 2))
         clamped_y = min(self.primary_screen.geometry().bottom(), max(self.transform.anchor.y, self.hitbox_height))
 
-        if self.transform.anchor.y < self.hitbox_height:
+        if self.transform.top < 0:
+            print("clamping clearing")
             self._clear_parent_window()
 
         dx = clamped_x - self.transform.anchor.x
@@ -620,11 +639,12 @@ class Pet(QWidget): # main logic
 
         if dx==0 and dy==0: return
 
+        
         print("clamping position")
 
         self.mover.move_global(dx, dy)
 
-        self.transform.set_position(clamped_x, clamped_y)
+        self.transform.set_position(clamped_x, clamped_y, self.transform.parent_surface_type)
         self.transform.anchor.x = clamped_x
         self.transform.anchor.y = clamped_y
 
@@ -645,8 +665,8 @@ class Pet(QWidget): # main logic
         dx, dy = 0, 0
 
         # following general movement
-        global_move_x = (x1 - px1) == (x2 - px2)
-        global_move_y = (y1 - py1) == (y2 - py2)
+        global_move_x: bool = (x1 - px1) == (x2 - px2)
+        global_move_y: bool = (y1 - py1) == (y2 - py2)
 
         match self.parent_surface_type:
             case SurfaceNormal.LEFT:
@@ -689,15 +709,17 @@ class Pet(QWidget): # main logic
             
             if resize: 
                 self.mover.set_position(anchor_x, anchor_y)  # moving to the edge when resizing
-                self.transform.set_position(anchor_x, anchor_y)
+                self.transform.set_position(anchor_x, anchor_y, self.transform.parent_surface_type)
 
         # if self.RENDER_CONFIG "stay_on_window_when_resize" == False pet should just fall off
         else:
             if not global_move_x and self.parent_surface_type in (SurfaceNormal.UP, SurfaceNormal.DOWN): # its much nicer to read, i hope its not too bad for performance
                 if anchor_x <= x1 - 2 or anchor_x >= x2 + 2:
+                    print("clearing cuz x")
                     self._clear_parent_window()
             if not global_move_y and self.parent_surface_type in (SurfaceNormal.LEFT, SurfaceNormal.RIGHT):
                 if anchor_y <= y1 - 2 or anchor_y >= y2 + 2:
+                    print("clearing cuz y")
                     self._clear_parent_window()
 
         self.parent_window_rect_last = rect
@@ -737,12 +759,6 @@ class Pet(QWidget): # main logic
         self.state_machine.raise_flag(Flag.PARENTED_TO_WINDOW)
         self.state_machine.remove_flag(Flag.NOT_PARENTED_TO_WINDOW)
         # print("Parent window:", hwnd)
-
-    # def apply_window_position(self):
-    #     self.move(
-    #         int(self.transform.center.x - self.width()  /2),
-    #         int(self.transform.center.y - self.height())
-    #     )
 
     def resize_keep_anchor(self, new_w, new_h):
         new_x = self.transform.anchor.x - new_w // 2
@@ -836,9 +852,30 @@ class Pet(QWidget): # main logic
         width = frame.width()
         height = frame.height()
 
+        offset_x = 0
+        offset_y = 0
+
+        match self.transform.parent_surface_type:
+            case None:
+                offset_x = width/2
+                offset_y = height/2
+            case SurfaceNormal.UP:
+                offset_x = width/2
+                offset_y = height
+            case SurfaceNormal.DOWN:
+                offset_x = width/2
+            case SurfaceNormal.RIGHT:
+                offset_y = height/2
+            case SurfaceNormal.LEFT:
+                offset_x = width
+                offset_y = height/2
+
         p.save()
 
         p.translate(anchor_x, anchor_y)
+
+        p.setPen(QPen(Qt.GlobalColor.blue, 6))
+        p.drawEllipse(QPointF(0, 0), 2, 2)
 
         sx = scale
         if self.facing == Facing.LEFT:
@@ -856,12 +893,11 @@ class Pet(QWidget): # main logic
 
         p.scale(sx, self.scale)
 
-        p.drawPixmap(int(-width/2), int(-height), frame)
+        p.drawPixmap(int(-offset_x), int(-offset_y), frame)
 
         p.restore()
 
-
-        # draws pets hitbox, pretty neat (says there are problems but works anyway)
+        # draws pets hitbox
         p.setPen(QPen(Qt.GlobalColor.red, 6))
         p.drawRect(int(self.transform.left), int(self.transform.top), int(self.transform.hitbox_width), int(self.transform.hitbox_height))
 
@@ -874,27 +910,6 @@ class Pet(QWidget): # main logic
         # p.setPen(QPen(Qt.GlobalColor.blue, 3))
         # p.drawLine(self.width(), 0, 0, self.height())
         # p.drawLine(offset_x, offset_y, anchor_x, anchor_y)
-
-        # p.translate(anchor_x, anchor_y)
-
-
-        # if self.rotation_angle != 0:
-        #     cx = center_x + self.drag_offset.x
-        #     cy = center_y + self.drag_offset.y
-        #     p.translate(cx, cy)
-        #     p.rotate(self.rotation_angle)
-        #     p.translate(-cx, -cy)
-
-        # p.scale(sx, self.scale)
-        # p.drawPixmap(int(pos_x), int(pos_y), frame)
-
-        # p.drawPixmap(
-        #     QRectF(pos_x, pos_y, scaled_w, scaled_h),
-        #     frame,
-        #     QRectF(frame.rect())
-        # )
-
-        # p.restore()
 
     def recall(self):
         self.particle_engine.clear_screen()

@@ -3,6 +3,7 @@
 
     "pet_size_on_screen": 8.5,
     "initial_position": [100, 0],
+    "initial_surface_normal": "UP",
     "hitbox_from_animation": "idle",
 
     "default_facing": "RIGHT",
