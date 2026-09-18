@@ -3,13 +3,14 @@
 
     "pet_size_on_screen": 8.5,
     "initial_position": [100, 0],
+    "initial_surface_normal": "UP",
     "hitbox_from_animation": "idle",
 
     "default_facing": "RIGHT",
     "default_loop_option": false,
 
     "drag_offset_x": 0,
-    "drag_offset_y": -1.4,
+    "drag_offset_y": -0.7,
 
 
     "render_particles": true,

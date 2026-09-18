@@ -1,14 +1,16 @@
 from engine.enums import Flag, Pulse, MovementType, Facing
 from engine.vec2 import Vec2
+from engine.data_classes import PetTransformData
 import math
 
 class Mover:
-    def __init__(self, pet):
-        self.pos = Vec2()
-        self.vel = Vec2()
-        self.target = Vec2()
+    def __init__(self, pet, pet_transform: PetTransformData):
+        self.pos: Vec2 = Vec2()
+        self.vel: Vec2 = Vec2()
+        self.target: Vec2 = Vec2()
 
         self.pet = pet
+        self.pet_transform: PetTransformData = pet_transform
 
         self.movement_type = None
         self.active = False
@@ -22,7 +24,7 @@ class Mover:
         # jump specific
         self.grounded_y = None
 
-    def reset_settings(self, RENDER_CONFIG):
+    def reset_settings(self, RENDER_CONFIG: dict):
         self.acceleration = RENDER_CONFIG.get("acceleration", 1200)
         self.max_speed = RENDER_CONFIG.get("max_speed", 700)
         self.slow_radius= RENDER_CONFIG.get("slow_radius", 120)
@@ -54,14 +56,14 @@ class Mover:
         self.jump_velocity = jump_velocity
         self.gravity = gravity
 
-    def set_position(self, x=0.0, y=None):
+    def set_position(self, x: float | Vec2 = 0.0, y: float | None =None):
         if y is None and isinstance(x, Vec2):
             self.pos = x
-        else:
-            self.pos = Vec2(x, y) #type: ignore
+        elif  isinstance(x, float):
+            self.pos = Vec2(x, y)
         self.vel = Vec2()
         # print("Mover set position at", self.pos.x, self.pos.y)
-        self.active = False 
+        self.active = False
 
     def move_global(self, dx, dy):
         self.pos.x += dx
@@ -69,27 +71,31 @@ class Mover:
         self.target.x += dx
         self.target.y += dy
 
-    def move_to(self, x, y, movement_type: MovementType):
+    def process_movementtype(self, x, y, movement_type: MovementType) -> tuple[Facing, bool]:
         self.active = True
-        if self.vel == None: return
+        # if self.vel == None: return
         self.target = Vec2(x, y)
         self.movement_type = movement_type
 
+        new_facing: Facing = Facing.RIGHT
+        should_clear_parent: bool = False
+
         if x < self.pos.x:
-            self.pet.facing = Facing.LEFT
+            new_facing = Facing.LEFT
         elif x > self.pos.x:
-            self.pet.facing = Facing.RIGHT
+            new_facing = Facing.RIGHT
 
         if movement_type == MovementType.INSTANT:
             self.set_position(x, y)
-            self.pet._clear_parent_window()
+            should_clear_parent = True
         
         if movement_type == MovementType.JUMP:
             self.grounded_y = self.pos.y
             self.pos.y -= 1 
             self.vel.y = -self.jump_velocity
-            self.pet._clear_parent_window()
+            should_clear_parent = True
 
+        return new_facing, should_clear_parent
         # print(pet.facing)
 
     def update(self, dt):
@@ -206,8 +212,8 @@ class Mover:
 
         screen = self.pet.primary_screen.availableGeometry()
         if (
-            mouse_pos.x >= screen.width() - self.pet.hitbox_width / 2
-            or mouse_pos.x <= self.pet.hitbox_width / 2
+            mouse_pos.x >= screen.width() - self.pet_transform.hitbox_width / 2
+            or mouse_pos.x <= self.pet_transform.hitbox_width / 2
             or mouse_pos.y >= screen.bottom()
         ):
             self.end_drag()

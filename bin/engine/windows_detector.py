@@ -13,8 +13,8 @@ from ctypes import wintypes
 import win32con
 import time
 
-from engine.enums import SurfaceType
-from engine.data_classes import AllSurfacesData, SegmentData
+from engine.enums import SurfaceNormal
+from engine.data_classes import AllSurfacesData, SegmentData, PetTransformData
 
 from engine.logger import app_logger as log
 from engine.logger import debug_logger as debug_log
@@ -595,7 +595,7 @@ class WindowsOverlay(QWidget):
         except Exception as e:
             log.warning(f"Windows hooks could not be installed.\n{e}")
 
-        self.update_hitbox(pet.hitbox_width, pet.hitbox_height)
+        self.update_hitbox(pet.transform.hitbox_width, pet.transform.hitbox_height)
 
         screen = QApplication.primaryScreen()
         self.screen_geom = screen.geometry()
@@ -625,7 +625,7 @@ class WindowsOverlay(QWidget):
 
         self.taskbar_rect = (
             self.screen_geom.left(),
-            self.screen_avail_geom.bottom() + 1,
+            self.screen_avail_geom.bottom(),
             self.screen_geom.right(),
             self.screen_geom.bottom()
         )
@@ -797,20 +797,36 @@ class WindowsOverlay(QWidget):
         L, T, R, B = rect
         return (L / scale, T / scale, R / scale, B / scale)
         
-    def check_parent_window_segment(self, pos_x: float, pos_y: float, hwnd, surface_type) -> bool:
+    def check_parent_window_segment(self, pet_transform: PetTransformData, hwnd) -> bool:
         """
         Returns True if pet is on any of the parent_windows' segments
         """
+        buffer = 2
+
         data = self.segments.get(hwnd)
         if not data: return False
 
-        L, T, R, B = data.rect
+        surface_type = pet_transform.parent_surface_type
+        if not surface_type: return False
 
-        buffer = 2
+        pos_x, pos_y = pet_transform.anchor
+
+        # L, T, R, B = data.rect
 
         # x must be inside one of the visible top segments
-        if any(x1-buffer <= pos_x <= x2+buffer for x1, x2 in data.top):
-            return True
+        match surface_type:
+            case SurfaceNormal.UP:
+                if any(x1-buffer <= pos_x <= x2+buffer for x1, x2 in data.top):
+                    return True
+            case SurfaceNormal.DOWN:
+                if any(x1-buffer <= pos_x <= x2+buffer for x1, x2 in data.bottom):
+                    return True
+            case SurfaceNormal.LEFT:
+                if any(y1-buffer <= pos_y <= y2+buffer for y1, y2 in data.right):
+                    return True
+            case SurfaceNormal.RIGHT:
+                if any(y1-buffer <= pos_y <= y2+buffer for y1, y2 in data.left):
+                    return True
 
         return False
 
@@ -823,79 +839,81 @@ class WindowsOverlay(QWidget):
             pos_y
         )
 
-    def collide_vertical(self, pos_x, pos_y, dy, collision_mask):
-        L,T,R,B = self.bounds(pos_x, pos_y)
+    def collide_vertical(self, hitbox: PetTransformData, dy, collision_mask: set[SurfaceNormal]):
+        L,T,R,B = hitbox.get_rect()
+        pos_x, pos_y = hitbox.center
 
-        best = dy
+        best: float = dy
         surface_data = None
-        collision = False
+        collision: SurfaceNormal | None = None
 
         surfaces = self.surfaces
 
-        if SurfaceType.TOP in collision_mask:  # moving down
+        if SurfaceNormal.UP in collision_mask:  # moving down
             for y, x1, x2, hwnd in surfaces.top:
 
-                if pos_x < x1 or pos_x > x2:   # i replaced R and L with pos.x because we care only about the center point
+                if pos_x < x1 or pos_x > x2:   # replaced R and L with pos_x because we care only about the center point
                     continue
 
                 dist = y - B
 
                 if 0 <= dist < best:
                     best = dist
-                    collision = SurfaceType.TOP
+                    collision = SurfaceNormal.UP
                     surface_data = (hwnd, y, x1, x2)
                     # print(y, x1, x2)
 
-        if SurfaceType.BOTTOM in collision_mask:  # moving up
+        if SurfaceNormal.DOWN in collision_mask:  # moving up
             for y, x1, x2, hwnd in surfaces.bottom:
 
-                if pos_x < x1 or pos_x > x2:
+                if pos_x < x1 or pos_x > x2:  # replaced R and L with pos_x because we care only about the center point
                     continue
 
                 dist = y - T
 
                 if best < dist < 0:
                     best = dist
-                    collision = SurfaceType.BOTTOM
+                    collision = SurfaceNormal.DOWN
                     surface_data = (hwnd, y, x1, x2)
                     # print(y, x1, x2)
 
         # print(dy, best, collision)
         return best, collision, surface_data
 
-    def collide_horizontal(self, pos_x, pos_y, dx, collision_mask):
-        L,T,R,B = self.bounds(pos_x, pos_y)
+    def collide_horizontal(self, hitbox: PetTransformData, dx, collision_mask: set[SurfaceNormal]):
+        L,T,R,B = hitbox.get_rect()
+        pos_x, pos_y = hitbox.center
 
-        best = dx
+        best: float = dx
         surface_data = None
-        collision = False
+        collision: SurfaceNormal | None = None
 
         surfaces = self.surfaces
 
-        if SurfaceType.LEFT in collision_mask:  # moving right
+        if SurfaceNormal.LEFT in collision_mask:  # moving right
             for x, y1, y2, hwnd in surfaces.left:
 
-                if B < y1 or T > y2:
+                if pos_y < y1 or pos_y > y2:     # replaced B and T with pos_y because we care only about the center point
                     continue
 
                 dist = x - R
 
                 if 0 <= dist < best:  # here it should be    if best < dist <= 0   for it to work inside-out, this is what should do next
                     best = dist
-                    collision = SurfaceType.LEFT
+                    collision = SurfaceNormal.LEFT
                     surface_data = (hwnd, x, y1, y2)
 
-        if SurfaceType.RIGHT in collision_mask:  # moving left
+        if SurfaceNormal.RIGHT in collision_mask:  # moving left
             for x, y1, y2, hwnd in surfaces.right:
 
-                if B < y1 or T > y2:
+                if pos_y < y1 or pos_y > y2:    # replaced R and L with pos_y because we care only about the center point
                     continue
 
                 dist = x - L
 
                 if best < dist <= 0:
                     best = dist
-                    collision = SurfaceType.RIGHT
+                    collision = SurfaceNormal.RIGHT
                     surface_data = (hwnd, x, y1, y2)
 
         return best, collision, surface_data

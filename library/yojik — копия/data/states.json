@@ -54,10 +54,9 @@
             },
             {
                 "if": [ 
-                    {"pulse":"CLICK"}, 
-                    {"var":"worrying_meter", "op":">", "value":50}    
+                    {"pulse":"CLICK"}   
                     ],
-                "to": "VERY_WORRIED"
+                "to": "ROLL"
             },
             {
                 "if": [ 

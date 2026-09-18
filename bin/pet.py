@@ -2,8 +2,8 @@
 import time, math, random
 from typing import Any
 from PySide6.QtWidgets import QApplication, QWidget
-from PySide6.QtGui import QPainter
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtGui import QPainter, QPen, QPixmap 
+from PySide6.QtCore import Qt, QTimer, QPointF
 
 import json
 import zipfile
@@ -13,7 +13,7 @@ from engine.state_machine import StateMachine
 from engine.click_detector import ClickDetector
 from engine.mover import Mover
 from engine.animator import Animator
-from engine.enums import Flag, Pulse, MovementType, Facing, SurfaceType
+from engine.enums import Flag, Pulse, MovementType, Facing, SurfaceNormal
 from engine.vec2 import Vec2
 from engine.behaviour_resolver import BehaviourResolver
 from engine.windows_detector import WindowsOverlay
@@ -21,18 +21,18 @@ from engine.variable_manager import VariableManager
 from engine.particles.particles_engine_openGL import ParticleOverlayWidget
 from engine.audio_engine import AudioEngine
 
-from engine.data_classes import AnimationData #, AnimationVariant
+from engine.data_classes import AnimationData, PetTransformData
 
 from engine.state_commands import *
 
 from engine.logger import app_logger as log
 from engine.logger import debug_logger as debug_log
 
-# import cProfile
+import cProfile
 
 
 #region --- HELPERS ---
-def scan_animation_bounds(frames: list) -> tuple[int,int]:
+def scan_animation_bounds(frames: list[QPixmap]) -> tuple[int,int]:
     max_w = 0
     max_h = 0
 
@@ -118,35 +118,48 @@ class Pet(QWidget): # main logic
     
         self.variable_manager = VariableManager(VARIABLES)
 
-        # self.profiler = cProfile.Profile()
+        self.profiler = cProfile.Profile()
         self.not_first_time_update: bool = False
-        # self.start_debugging = False
+        self.start_debugging = False
 
-        self.hitbox_width = 0
-        self.hitbox_height = 0
+        # self.hitbox_width = 0
+        # self.hitbox_height = 0
+        self.primary_screen = QApplication.primaryScreen()
+        self.taskbar_top = self.primary_screen.availableGeometry().bottom() # Taskbar position detection
+
+        print("taskbar_top is", self.taskbar_top)
+
+        init_pos = Vec2(self.RENDER_CONFIG.get("initial_position", (100, 0)))
+        init_pos = Vec2(init_pos.x, self.taskbar_top + init_pos.y)
 
         self.parent_window_hwnd: int|None = None
         self.parent_window_rect_last = None
 
         self.stay_on_window_when_resize = self.RENDER_CONFIG.get("stay_on_window_when_resize", False) 
 
-        self.mover = Mover(self)
-        self.mover.reset_settings(self.RENDER_CONFIG) # needs to be done immediately to apply settings
+        init_surface_normal_cfg = self.RENDER_CONFIG.get("initial_surface_normal", SurfaceNormal.UP)
+        parent_surface_type = SurfaceNormal.__members__.get(init_surface_normal_cfg, None)
+            
+        self.transform = PetTransformData(
+            center               = init_pos,
+            parent_surface_type  = None,
+            hitbox_height        = 10,
+            hitbox_width         = 10
+        )
+        self.transform.set_position(init_pos.x, init_pos.y, parent_surface_type)
 
-        self.primary_screen = QApplication.primaryScreen()
-        self.taskbar_top = self.primary_screen.availableGeometry().bottom() # Taskbar position detection
-        init_pos = Vec2(self.RENDER_CONFIG.get("initial_position", (100, 0)))
-        self.mover.set_position(init_pos.x, self.taskbar_top + init_pos.y + 1) # set initial position
-        self.anchor = Vec2(init_pos.x, self.taskbar_top + init_pos.y + 1)
+        self.mover = Mover(pet=self, pet_transform=self.transform)
+        self.mover.reset_settings(self.RENDER_CONFIG) # needs to be done immediately to apply settings
+        self.mover.set_position(init_pos) # set initial position
 
         cfg_facing = self.RENDER_CONFIG.get("default_facing")
         self.facing: Facing = Facing.__members__.get(cfg_facing, Facing.RIGHT) # type: ignore  # defining facing direction
 
-        self.behaviour_resolver = BehaviourResolver(self, BEHAVIOURS)
+        self.behaviour_resolver = BehaviourResolver(self, self.transform, BEHAVIOURS)
 
         self.windowsOverlay = WindowsOverlay(self)
 
-        self.particle_engine = ParticleOverlayWidget(pet=self, RENDER_CONFIG=self.RENDER_CONFIG ,ASSETS=ASSETS, PARTICLES=PARTICLES, archive=archive)
+        self.particle_engine = ParticleOverlayWidget(pet_position=self.transform, RENDER_CONFIG=self.RENDER_CONFIG, ASSETS=ASSETS, PARTICLES=PARTICLES, archive=archive)
         self.particle_logic_acc = 0
         self.particle_draw_acc = 0
 
@@ -162,10 +175,13 @@ class Pet(QWidget): # main logic
         self.on_state_enter(initial_state)
 
         h = self.primary_screen.availableGeometry().height()
+        self.scale: float = 0.0
         self.update_dpi_and_scale(h=h, initial_state=initial_state)
 
         max_measurement = max(self.max_bounds_w, self.max_bounds_h)
-        self.resize_keep_anchor(int(max_measurement * self.scale * 2), int(max_measurement * self.scale * 2))
+
+        screen_geometry = self.primary_screen.geometry()
+        self.setGeometry(screen_geometry)
 
         self.last_mouse_pos = Vec2()
 
@@ -284,7 +300,7 @@ class Pet(QWidget): # main logic
         print("STATE:", state)
         self.current_state = state
         # if self.parent_window_hwnd:
-        #     # print(f"Position: {self.anchor.x}, {self.anchor.y}\nState: {self.current_state}\nParent window: {self.parent_window_hwnd}\nParent window position: {self.parent_window_rect_last}")
+        #     # print(f"Position: {self.position.anchor.x}, {self.position.anchor.y}\nState: {self.current_state}\nParent window: {self.parent_window_hwnd}\nParent window position: {self.parent_window_rect_last}")
 
         cfg: dict = self.STATES[state]
 
@@ -292,6 +308,7 @@ class Pet(QWidget): # main logic
         self._resolve_behavior(next_behaviour, cfg)
 
         if self.mover.movement_type == MovementType.DRAG and self.parent_window_hwnd:
+            # print("clear parent cuz drag")
             self._clear_parent_window()
 
         # isAbletoRotate = True if self.mover.movement_type == MovementType.DRAG else False   # not used anymore but maybe later
@@ -354,8 +371,8 @@ class Pet(QWidget): # main logic
         # print(self.behaviour_name)
         self.behaviour_name = behaviour
         target_x, target_y, type, mover_settings, collision_settings, parenting_settings = self.behaviour_resolver.resolve(self.behaviour_name)
-        self.surface_to_collide_with = collision_settings
-        self.surfaces_to_parent_to = parenting_settings
+        self.surface_to_collide_with: set[SurfaceNormal] = collision_settings
+        self.surfaces_to_parent_to: set[SurfaceNormal] = parenting_settings
 
         if mover_settings: # using mover settings from behaviours first
             acceleration = mover_settings.get("acceleration", self.mover.acceleration)
@@ -404,7 +421,9 @@ class Pet(QWidget): # main logic
             return
 
         # print("on state change", end="")
-        self.mover.move_to(target_x, target_y, type)
+        new_facing, should_clear_parent_window = self.mover.process_movementtype(target_x, target_y, type)
+        self.facing = new_facing
+        if should_clear_parent_window: self._clear_parent_window()
 
     def _resolve_animation(self, animation_cfg: str | list[list]) -> str:
         if isinstance(animation_cfg, str):
@@ -458,9 +477,11 @@ class Pet(QWidget): # main logic
 
         self.total_time_active += dt
 
-        # if self.start_debugging:
-        #     self.profiler.disable()
-        #     self.profiler.enable()  # start profiling
+        # print("\n")
+
+        if self.start_debugging:
+            self.profiler.disable()
+            self.profiler.enable()  # start profiling
         
         if self.mover.movement_type == MovementType.DRAG:
             self.mover.update_drag_target(self.last_mouse_pos, dt)
@@ -474,69 +495,76 @@ class Pet(QWidget): # main logic
         self.parent_window_rect = None
         followed_parent = False
 
-        if self.parent_window_hwnd:
+        # print("transform center before follow is", self.transform.center)
+        # print("transform parent_type before follow is", self.transform.parent_surface_type)
+
+        # t_parent = time.perf_counter()
+        if self.parent_window_hwnd and self.parent_window_hwnd != self.windowsOverlay.TASKBAR_HWND:
             rect = self.windowsOverlay.update_parent_window(self.parent_window_hwnd)
 
-            if rect:  self.parent_window_rect = rect
-            else:     self._clear_parent_window()
-
-            # print(self.parent_window_hwnd)
+            if rect: self.parent_window_rect = rect
+            else: self._clear_parent_window()
 
             followed_parent = self._follow_parent_window(self.parent_window_rect)
             # print("followed_parent:", followed_parent)
+            # print("transform center after follow is", self.transform.center)
 
             if not followed_parent:
                 # print("checking visible seg")
-                on_visible_segment = self.windowsOverlay.check_parent_window_segment(self.anchor.x, self.anchor.y, self.parent_window_hwnd, self.parent_surface_type)
+                on_visible_segment = self.windowsOverlay.check_parent_window_segment(self.transform, self.parent_window_hwnd)
                 # print(on_visible_segment)
                 if not on_visible_segment:
-                    print(f"cleared window because was not on visible segment\n{self.anchor.x, self.anchor.y}\nfollowed={followed_parent}, {self.parent_window_rect}")
                     self._clear_parent_window()
+                    print(f"cleared window because was not on visible segment\n{self.transform.anchor.x, self.transform.anchor.y}\nfollowed={followed_parent}, {self.parent_window_rect}")
 
         t3 = time.perf_counter()
 
         # --- updating Mover and collisions ---
         arrived = self.mover.update(dt)
+        # self.transform.update()
         
-        dx = self.mover.pos.x - self.anchor.x
-        dy = self.mover.pos.y - self.anchor.y
+        dx = self.mover.pos.x - self.transform.anchor.x
+        dy = self.mover.pos.y - self.transform.anchor.y
 
-        col_x, col_y = False, False
+        # print("dx", dx)
+        # print("dy", dy)
+
+        col_x, col_y = None, None
         surface_data = None
 
         # --- checking for collisions and applying delta ---
         if self.mover.movement_type != MovementType.DRAG and dx != 0:
             # print("arrived", arrived)
-            dx, col_x, surface_data = self.windowsOverlay.collide_horizontal(self.anchor.x, self.anchor.y, dx, collision_mask=self.surface_to_collide_with)
+            # print("checking collision")
+            dx, col_x, surface_data = self.windowsOverlay.collide_horizontal(self.transform, dx, collision_mask=self.surface_to_collide_with)
 
-        self.anchor.x += dx
+        if dx != 0:
+            self.transform.move(dx=dx)
 
         if not col_x and self.mover.movement_type != MovementType.DRAG and dy != 0:
-            dy, col_y, surface_data = self.windowsOverlay.collide_vertical(self.anchor.x, self.anchor.y, dy, collision_mask=self.surface_to_collide_with)
+            dy, col_y, surface_data = self.windowsOverlay.collide_vertical(self.transform, dy, collision_mask=self.surface_to_collide_with)
             # print(dy)
         
-        self.anchor.y += dy
+        if dy != 0:
+            self.transform.move(dy=dy)
         
         # --- if mover reached destination or collision occured - movement finished
         if arrived or col_x or col_y:
-            # print("col_x: ", col_x, "self.surfaces: ", self.surfaces_to_parent_to)
-            # print("making mover set position cuz", arrived, col_x, col_y)
-            # print("if arrived", end="")
-            self.mover.set_position(self.anchor.x, self.anchor.y)
+            print("col_y: ", col_y, "self.surfaces: ", self.surfaces_to_parent_to)
+            print("making mover set position cuz", arrived, col_x, col_y)
+            print("if arrived", end="")
+            print("transform center is", self.transform.center)
+
+            if surface_data:
+                col_surface: SurfaceNormal | None = col_x if col_x else col_y
+
+                if col_surface in self.surfaces_to_parent_to:
+                    self._set_parent_window(col_surface, surface_data)
+
+            self.mover.set_position(self.transform.anchor.x, self.transform.anchor.y)
             self.click_detector.release()
             self.state_machine.raise_flag(Flag.MOVEMENT_FINISHED)
 
-            if surface_data:
-                # if not col_y: col_y = False
-                # print("checking parenting", col_y, "in", self.surfaces_to_parent_to)
-                # print("checking parenting is ", col_y in self.surfaces_to_parent_to)
-                if col_x in self.surfaces_to_parent_to or col_y in self.surfaces_to_parent_to:
-                    self._set_parent_window(col_x, col_y, surface_data)
-
-            arrived, col_x, col_y = False, False, False
-
-        # print("position is", self.mover.pos.x, self.mover.pos.y)
-        # print("facing is", self.facing)
         t5 = time.perf_counter()
 
         transition_data, commands = self.state_machine.update(dt)
@@ -555,22 +583,17 @@ class Pet(QWidget): # main logic
 
         # --- SYNC PHASE ---
         self._clamp_position_to_screen()
-
-        if dx or dy or followed_parent:
-            self.apply_window_position()
         t7 = time.perf_counter()
 
-        # checking if next frame is not the same as current and updating then
         self.animator.update(dt)
         t4 = time.perf_counter()
 
         index = self.animator.index
-
         if not self.prev_frame_index: self.prev_frame_index = index -  1 # kinda useless but lets keep it for now
 
-        if index != self.prev_frame_index or self.mover.movement_type == MovementType.DRAG: 
-            # print("triggering update because", index, self.prev_index)
+        if index != self.prev_frame_index or self.mover.movement_type == MovementType.DRAG or dx or dy or followed_parent:
             self.update()  # repaint
+
         self.prev_frame_index = index
 
         # --- UPDATING PARTICLES ---
@@ -592,27 +615,36 @@ class Pet(QWidget): # main logic
         # print(f"Particles: Update: {t9-t8}    Draw: {t10-t9}")
 
         # print(f"update windows frames takes {t3-t1}")
-        # self.profiler.disable()  # stop profiling
-        # self.profiler.dump_stats("test.prof")
+        if self.start_debugging:
+            self.profiler.disable()
+            self.profiler.dump_stats("test.prof")
 
 
     def update_apps(self, app_state):
         self.state_machine.update_apps(app_state)
 
     def _clamp_position_to_screen(self):
-        clamped_x = min(self.primary_screen.availableGeometry().width() - self.hitbox_width / 2, max(self.anchor.x, self.hitbox_width / 2))
-        clamped_y = min(self.primary_screen.geometry().bottom(), max(self.anchor.y, self.hitbox_height))
+        hitbox_width  = self.transform.hitbox_width
+        hitbox_height  = self.transform.hitbox_height
 
-        if self.anchor.y < self.hitbox_height:
+        clamped_x = min(self.primary_screen.availableGeometry().width() - hitbox_width / 2, max(self.transform.anchor.x, hitbox_width / 2))
+        clamped_y = min(self.primary_screen.geometry().bottom(), max(self.transform.anchor.y, hitbox_height))
+
+        if self.transform.top < 0:
+            print("clamping clearing")
             self._clear_parent_window()
 
-        dx = clamped_x - self.anchor.x
-        dy = clamped_y - self.anchor.y
+        dx = clamped_x - self.transform.anchor.x
+        dy = clamped_y - self.transform.anchor.y
 
-        self.mover.move_global(dx,dy)
+        if dx==0 and dy==0: return
 
-        self.anchor.x = clamped_x
-        self.anchor.y = clamped_y
+        print("clamping position")
+
+        self.mover.move_global(dx, dy)
+
+        self.transform.set_position(clamped_x, clamped_y, self.transform.parent_surface_type)
+
 
     def _follow_parent_window(self, rect: tuple|None) -> bool:
         if not self.parent_window_hwnd:
@@ -623,62 +655,72 @@ class Pet(QWidget): # main logic
             return False
         
         followed = False
+        anchor_x = self.transform.anchor.x
+        anchor_y = self.transform.anchor.y
+
+        hitbox_width  =  self.transform.hitbox_width
+        hitbox_height =  self.transform.hitbox_height
+
+        parent_surface_type = self.transform.parent_surface_type
 
         x1, y1, x2, y2 = rect
         px1, py1, px2, py2 = self.parent_window_rect_last
         dx, dy = 0, 0
 
         # following general movement
-        global_move_x = (x1 - px1) == (x2 - px2)
-        global_move_y = (y1 - py1) == (y2 - py2)
+        global_move_x: bool = (x1 - px1) == (x2 - px2)
+        global_move_y: bool = (y1 - py1) == (y2 - py2)
 
-        match self.parent_surface_type:
-            case SurfaceType.LEFT:
+        match parent_surface_type:
+            case SurfaceNormal.LEFT:
                 if global_move_y: dy = y1 - py1 
                 dx = x1 - px1
-                if self.anchor.x != x1: dx = x1 - self.anchor.x
-            case SurfaceType.TOP:
+                if anchor_x != x1: dx = x1 - anchor_x
+            case SurfaceNormal.UP:
                 if global_move_x: dx = x1 - px1 
                 dy = y1 - py1
-                if self.anchor.y != y1: dy = y1 - self.anchor.y
-            case SurfaceType.RIGHT:
+                if anchor_y != y1: dy = y1 - anchor_y
+            case SurfaceNormal.RIGHT:
                 if global_move_y: dy = y1 - py1 
                 dx = x2 - px2
-                if self.anchor.x != x2: dx = x2 - self.anchor.x
-            case SurfaceType.BOTTOM:
+                if anchor_x != x2: dx = x2 - anchor_x
+            case SurfaceNormal.DOWN:
                 if global_move_x: dx = x1 - px1 
                 dy = y2 - py2
-                if self.anchor.y != y2: dy = y2 - self.anchor.y
+                if anchor_y != y2: dy = y2 - anchor_y
 
         # staying on windows or falling off
-        resize = False
+        resized: bool = False
 
         if self.stay_on_window_when_resize:
-            if self.parent_surface_type == SurfaceType.TOP or self.parent_surface_type == SurfaceType.BOTTOM:
-                if self.anchor.x < x1 + self.hitbox_width/2:
-                    self.anchor.x = x1 + self.hitbox_width/2
-                    resize = True
-                elif self.anchor.x > x2 - self.hitbox_width/2:
-                    self.anchor.x = x2 - self.hitbox_width/2
-                    resize = True
-            elif self.parent_surface_type == SurfaceType.LEFT or self.parent_surface_type == SurfaceType.RIGHT:
-                if self.anchor.y < y1 + self.hitbox_height:
-                    self.anchor.y = y1 + self.hitbox_height
-                    resize = True
-                elif self.anchor.y > y2:
-                    self.anchor.y = y2
-                    resize = True
+            if parent_surface_type == SurfaceNormal.UP or parent_surface_type == SurfaceNormal.DOWN:
+                if anchor_x < x1 + hitbox_width/2:
+                    anchor_x = x1 + hitbox_width/2
+                    resized = True
+                elif anchor_x > x2 - hitbox_width/2:
+                    anchor_x = x2 - hitbox_width/2
+                    resized = True
+            elif parent_surface_type == SurfaceNormal.LEFT or parent_surface_type == SurfaceNormal.RIGHT:
+                if anchor_y < y1 + hitbox_height:
+                    anchor_y = y1 + hitbox_height
+                    resized = True
+                elif anchor_y > y2:
+                    anchor_y = y2
+                    resized = True
             
-            if resize: 
-                self.mover.set_position(self.anchor.x, self.anchor.y)  # moving to the edge when resizing
+            if resized: 
+                self.mover.set_position(anchor_x, anchor_y)  # moving to the edge when resizing
+                self.transform.set_position(anchor_x, anchor_y, self.transform.parent_surface_type)
 
         # if self.RENDER_CONFIG "stay_on_window_when_resize" == False pet should just fall off
         else:
-            if not global_move_x and self.parent_surface_type in (SurfaceType.TOP, SurfaceType.BOTTOM): # its much nicer to read, i hope its not too bad for performance
-                if self.anchor.x <= x1 - 2 or self.anchor.x >= x2 + 2:
+            if not global_move_x and parent_surface_type in (SurfaceNormal.UP, SurfaceNormal.DOWN): # its much nicer to read, i hope its not too bad for performance
+                if anchor_x <= x1 - 2 or anchor_x >= x2 + 2:
+                    print("clearing cuz x")
                     self._clear_parent_window()
-            if not global_move_y and self.parent_surface_type in (SurfaceType.LEFT, SurfaceType.RIGHT):
-                if self.anchor.y <= y1 - 2 or self.anchor.y >= y2 + 2:
+            if not global_move_y and parent_surface_type in (SurfaceNormal.LEFT, SurfaceNormal.RIGHT):
+                if anchor_y <= y1 - 2 or anchor_y >= y2 + 2:
+                    print("clearing cuz y")
                     self._clear_parent_window()
 
         self.parent_window_rect_last = rect
@@ -695,37 +737,29 @@ class Pet(QWidget): # main logic
         self.state_machine.raise_flag(Flag.NOT_PARENTED_TO_WINDOW)
         self.state_machine.remove_flag(Flag.PARENTED_TO_WINDOW)
         self.parent_window_hwnd = None
-        self.parent_surface_type = None
+        self.transform.parent_surface_type = None
+        print("CLEARED PARENT WINDOW")
         self.parent_window_rect_last = None
 
-    def _set_parent_window(self, col_x, col_y, surface_data):
+    def _set_parent_window(self, collision_surface: SurfaceNormal | None, surface_data):
         hwnd = surface_data[0]
 
-        if hwnd == self.windowsOverlay.TASKBAR_HWND: return
-
-        if col_x:  
-            self.parent_surface_type = col_x
-        else: self.parent_surface_type = col_y
-        # print("surface type:", self.parent_surface_type)
-
-        self.parent_window_rect_last = self.windowsOverlay.update_parent_window(hwnd)
+        self.transform.parent_surface_type = collision_surface
+        print("surface normal", collision_surface)
 
         self.parent_window_hwnd = hwnd
         self.state_machine.pulse(Pulse.GAINED_PARENT)
+
+        if hwnd == self.windowsOverlay.TASKBAR_HWND: 
+            self.parent_window_rect_last = self.windowsOverlay.taskbar_rect
+            return
+
+        self.parent_window_rect_last = self.windowsOverlay.update_parent_window(hwnd)
+
         self.state_machine.raise_flag(Flag.PARENTED_TO_WINDOW)
         self.state_machine.remove_flag(Flag.NOT_PARENTED_TO_WINDOW)
         # print("Parent window:", hwnd)
 
-    def apply_window_position(self):
-        self.move(
-            int(self.anchor.x - self.width() / 2),
-            int(self.anchor.y - self.height())
-        )
-
-    def resize_keep_anchor(self, new_w, new_h):
-        new_x = self.anchor.x - new_w // 2
-        new_y = self.anchor.y - new_h
-        self.setGeometry(new_x, new_y, new_w, new_h)
     
     def update_dpi_and_scale(self, h, initial_state):
         percentage = self.RENDER_CONFIG["pet_size_on_screen"] / 100
@@ -753,16 +787,18 @@ class Pet(QWidget): # main logic
             if not frame:
                 frame = self.animator.get_frame()
                       
-            self.hitbox_width = frame.width() * self.scale
-            self.hitbox_height = frame.height() * self.scale
+            hitbox_width = frame.width() * self.scale
+            hitbox_height = frame.height() * self.scale
 
-            self.windowsOverlay.update_hitbox(self.hitbox_width, self.hitbox_height)
-            self.particle_engine.update_hitbox(self.hitbox_width, self.hitbox_height)
+            self.windowsOverlay.update_hitbox(hitbox_width, hitbox_height)
+            self.particle_engine.update_hitbox(hitbox_width, hitbox_height)
+
+            self.transform.set_hitbox(int(hitbox_width), int(hitbox_height))
 
             # print(self.hitbox_height)
             # print(self.hitbox_width)
 
-            self.drag_offset = Vec2(self.hitbox_width * self.RENDER_CONFIG["drag_offset_x"], self.hitbox_height * self.RENDER_CONFIG["drag_offset_y"])
+            self.drag_offset = Vec2(self.transform.hitbox_width * self.RENDER_CONFIG["drag_offset_x"], self.transform.hitbox_height * self.RENDER_CONFIG["drag_offset_y"])
             self.mover.drag_offset = self.drag_offset
 
     def mousePressEvent(self, event):
@@ -788,12 +824,13 @@ class Pet(QWidget): # main logic
     def leaveEvent(self, event):
         self.mover.end_drag()  
 
-    # def keyPressEvent(self, e): #doesnt work when app is in background
-    #     if e.key() == Qt.Key.Key_F4:
-    #         print(f"______________________________\n\n  PET REPORT\n\nPosition: {self.anchor.x}, {self.anchor.y}\nState: {self.current_state}\nCurrent behaviour: {self.behaviour_name}\nParent window: {self.parent_window_hwnd}\nParent window position: {self.parent_window_rect_last}\n\n  ^^^.>.\n______________________________")
-    #     elif e.key() == Qt.Key.Key_L:
-    #         print("Start debugging")
-    #         self.start_debugging = True
+    def keyPressEvent(self, e): #doesnt work when app is in background
+        if e.key() == Qt.Key.Key_F4:
+            print(self.transform)
+            # print(f"______________________________\n\n  PET REPORT\n\nPosition: {self.position.anchor.x}, {self.position.anchor.y}\nState: {self.current_state}\nCurrent behaviour: {self.behaviour_name}\nParent window: {self.parent_window_hwnd}\nParent window position: {self.parent_window_rect_last}\n\n  ^^^.>.\n______________________________")
+        elif e.key() == Qt.Key.Key_L:
+            print("Start debugging")
+            self.start_debugging = True
 
     def paintEvent(self, e): #draws the frame reveived from Animator 
         frame = self.animator.get_frame()
@@ -803,44 +840,79 @@ class Pet(QWidget): # main logic
         p = QPainter(self)
         p.setRenderHint(QPainter.SmoothPixmapTransform, True) # pyright: ignore[reportAttributeAccessIssue]
 
-        # p.fillRect(self.rect(), QColor(80, 80, 80))  # dark gray
+        scale = self.scale
 
-        # draw sprite so its bottom-middle is at (self.x, self.y)
-        anchor_x = self.width() / 2
-        anchor_y = self.height()
+        # self.facing = Facing.RIGHT
 
-        offset_x: int = int(frame.width() / 2)
-        offset_y: int = frame.height()
+        anchor_x = self.transform.anchor.x
+        anchor_y = self.transform.anchor.y
+
+        width = frame.width()
+        height = frame.height()
+
+        offset_x = 0
+        offset_y = 0
+
+        mirror_offset = 0
+
+        match self.transform.parent_surface_type:
+            case None:
+                offset_x = width/2
+                offset_y = height/2
+            case SurfaceNormal.UP:
+                offset_x = width/2
+                offset_y = height
+            case SurfaceNormal.DOWN:
+                offset_x = width/2
+            case SurfaceNormal.RIGHT:
+                offset_y = height/2
+                mirror_offset = width/4 # i dont understand why this works
+            case SurfaceNormal.LEFT:
+                offset_x = width
+                offset_y = height/2
 
         p.save()
 
-        sx = self.scale
+        p.translate(anchor_x, anchor_y)
+
+        p.setPen(QPen(Qt.GlobalColor.blue, 6))
+        p.drawEllipse(QPointF(0, 0), 2, 2)
+
+        sx = scale
         if self.facing == Facing.LEFT:
             sx *= -1
 
-        p.translate(anchor_x, anchor_y)
-
-        # draws pets hitbox, pretty neat (says there are problems but works anyway)
-        # p.setPen(QPen(Qt.red, 3))
-        # p.drawRect(-self.hitbox_width/2, -self.hitbox_height, self.hitbox_width, self.hitbox_height)
-
-        # p.setPen(QPen(Qt.green, 6))
-        # p.drawEllipse(QPointF(0, 0), 2, 2)
-
-        # p.setPen(QPen(Qt.blue, 3))
-        # p.drawLine(self.width(), 0, 0, self.height())
-        # p.drawLine(offset_x, offset_y, anchor_x, anchor_y)
-
+        # Rotation around transform.center + drag_offset
         if self.rotation_angle != 0:
-            cx, cy = self.drag_offset
+            cx = self.drag_offset.x
+            cy = self.drag_offset.y
             p.translate(cx, cy)
+            # p.setPen(QPen(Qt.GlobalColor.green, 6))
+            # p.drawEllipse(QPointF(0, 0), 2, 2)
             p.rotate(self.rotation_angle)
             p.translate(-cx, -cy)
 
-        p.scale(sx, self.scale)
-        p.drawPixmap(-offset_x, -offset_y, frame)
+        p.translate(mirror_offset, 0)
+        p.scale(sx, scale)
+        p.translate(-mirror_offset * scale, 0)
+
+        p.drawPixmap(int(-offset_x), int(-offset_y), frame)
 
         p.restore()
+
+        # draws pets hitbox
+        p.setPen(QPen(Qt.GlobalColor.red, 6))
+        p.drawRect(int(self.transform.left), int(self.transform.top), int(self.transform.hitbox_width), int(self.transform.hitbox_height))
+
+        # p.setPen(QPen(Qt.GlobalColor.green, 6))
+        # p.drawEllipse(QPointF(0, 0), 2, 2)
+ 
+        # p.setPen(QPen(Qt.GlobalColor.blue, 6))
+        # p.drawEllipse(QPointF(0, 0), 2, 2)
+
+        # p.setPen(QPen(Qt.GlobalColor.blue, 3))
+        # p.drawLine(self.width(), 0, 0, self.height())
+        # p.drawLine(offset_x, offset_y, anchor_x, anchor_y)
 
     def recall(self):
         self.particle_engine.clear_screen()

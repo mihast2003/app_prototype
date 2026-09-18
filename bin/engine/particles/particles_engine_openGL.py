@@ -8,6 +8,7 @@ import zipfile
 
 from engine.asset_loader import AssetLoader
 from engine.particles.particle_emitter import ParticleEmitter
+from engine.data_classes import PetTransformData
 
 from OpenGL.GL import * #type: ignore
 
@@ -38,10 +39,12 @@ def get_frame_index(anim, age):
 
 #widget drawing particles, fullscreen transparent to clicks
 class ParticleOverlayWidget(QOpenGLWidget):
-    def __init__(self, pet, RENDER_CONFIG, ASSETS, PARTICLES, archive: zipfile.ZipFile):
+    def __init__(self, pet_position: PetTransformData, RENDER_CONFIG, ASSETS, PARTICLES, archive: zipfile.ZipFile):
         self.ASSETS = ASSETS
         self.PARTICLES = PARTICLES
         self.RENDER_CONFIG = RENDER_CONFIG
+
+        self.pet_position = pet_position
 
         super().__init__()
 
@@ -75,8 +78,7 @@ class ParticleOverlayWidget(QOpenGLWidget):
         self.window_width = self.width()
         self.window_height = self.height()
 
-        self.pet = pet
-        self.taskbar_top = self.pet.taskbar_top
+        self.taskbar_top = self.primary_screen.availableGeometry().bottom()
         self.taskbar_ndc_y = 1.0 - ((self.taskbar_top / self.primary_screen.geometry().height()) * 2.0)
         print("task y ndc", self.taskbar_ndc_y)
 
@@ -297,7 +299,7 @@ class ParticleOverlayWidget(QOpenGLWidget):
         
         # print(f"Adding emitter:\n   Name: {name}, \n   cfg: {cfg}")
 
-        new_emitter = ParticleEmitter(particleSystem=self, name=name, cfg=cfg, hitbox_width=self.pet_hitbox_w, hitbox_height=self.pet_hitbox_h)
+        new_emitter = ParticleEmitter(particleSystem=self, name=name, cfg=cfg, pet_transform=self.pet_position)
 
         if constant:
             self.constant_emitters.append(new_emitter)
@@ -366,8 +368,8 @@ class ParticleOverlayWidget(QOpenGLWidget):
         # print("( particles \"dirt\"", self.particles_by_type["dirt"], ", time spent", time.perf_counter() - t0, ")") # for debugging
    
     def offset_geometry(self):
-        r = self.geometry()
-        self.setGeometry(r.x(), r.y(), r.width()+1, r.height())
+        g = self.geometry()
+        self.setGeometry(g.x(), g.y(), g.width()+1, g.height())
 
     # --- DRAWING ---
     def draw(self):
