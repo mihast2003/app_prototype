@@ -69,11 +69,13 @@ def _convert_recursive(obj: Any, dict_names: list[str]) -> Any:
 #endregion
 
 class Pet(QWidget): # main logic
-    def __init__(self, archive: zipfile.ZipFile, main_hwnd):
+    def __init__(self, archive: zipfile.ZipFile, debug_mode: bool):
         super().__init__()
         log.info("---INITIALISATION START---")
         debug_log.info("\n")
         debug_log.info("---CALLING YOJI---")
+
+        self.debug_mode = debug_mode
 
         config_path = "data/render_config.json"
         with archive.open(config_path) as f:
@@ -875,8 +877,9 @@ class Pet(QWidget): # main logic
 
         p.translate(anchor_x, anchor_y)
 
-        p.setPen(QPen(Qt.GlobalColor.blue, 6))
-        p.drawEllipse(QPointF(0, 0), 2, 2)
+        if self.debug_mode:
+            p.setPen(QPen(Qt.GlobalColor.green, 6))
+            p.drawEllipse(QPointF(0, 0), 2, 2)
 
         sx = scale
         if self.facing == Facing.LEFT:
@@ -901,8 +904,9 @@ class Pet(QWidget): # main logic
         p.restore()
 
         # draws pets hitbox
-        p.setPen(QPen(Qt.GlobalColor.red, 6))
-        p.drawRect(int(self.transform.left), int(self.transform.top), int(self.transform.hitbox_width), int(self.transform.hitbox_height))
+        if self.debug_mode:
+            p.setPen(QPen(Qt.GlobalColor.red, 3))
+            p.drawRect(int(self.transform.left), int(self.transform.top), int(self.transform.hitbox_width), int(self.transform.hitbox_height))
 
         # p.setPen(QPen(Qt.GlobalColor.green, 6))
         # p.drawEllipse(QPointF(0, 0), 2, 2)

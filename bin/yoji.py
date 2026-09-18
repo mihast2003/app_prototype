@@ -561,9 +561,9 @@ class MainWindow(QWidget):
                 print("--Calling pet.py")
                 log.info("--Calling pet.py")
 
-                self._check_debug_mode_checkbox()
+                launch_in_debug_mode = self._check_debug_mode_checkbox()
 
-                self.pet = Pet(archive, main_hwnd=int(window.winId()))
+                self.pet = Pet(archive=archive, debug_mode=launch_in_debug_mode)
                 self.pet.show()
                 self.pet_active = True
 
@@ -613,13 +613,15 @@ class MainWindow(QWidget):
         log.info("Atlas found: success")
         return True
 
-    def _check_debug_mode_checkbox(self):
+    def _check_debug_mode_checkbox(self) -> bool:
         self.debug_checkbox.setDisabled(True)
         if self.debug_checkbox.isChecked():
             log.info(f"Launching pet in debug mode")
             debug_logger.start_logging(self.yoji_name)
+            return True
         else: 
             debug_logger.stop_logging()
+            return False
 
     def start_call(self):
         self.call_in_progress = True
