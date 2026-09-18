@@ -159,7 +159,7 @@ class Pet(QWidget): # main logic
 
         self.windowsOverlay = WindowsOverlay(self)
 
-        self.particle_engine = ParticleOverlayWidget(pet_position=self.transform, RENDER_CONFIG=self.RENDER_CONFIG ,ASSETS=ASSETS, PARTICLES=PARTICLES, archive=archive)
+        self.particle_engine = ParticleOverlayWidget(pet_position=self.transform, RENDER_CONFIG=self.RENDER_CONFIG, ASSETS=ASSETS, PARTICLES=PARTICLES, archive=archive)
         self.particle_logic_acc = 0
         self.particle_draw_acc = 0
 
@@ -533,8 +533,6 @@ class Pet(QWidget): # main logic
         
         if dy != 0:
             self.transform.move(dy=dy)
-
-        # print("transform center start is", self.transform.center)
         
         # --- if mover reached destination or collision occured - movement finished
         if arrived or col_x or col_y:
@@ -544,22 +542,16 @@ class Pet(QWidget): # main logic
             print("transform center is", self.transform.center)
 
             if surface_data:
-                # print("checking parenting", col_y, "in", self.surfaces_to_parent_to)
-                # print("checking parenting is ", col_y in self.surfaces_to_parent_to)
-                col_surface = col_x if col_x else col_y
-                self._set_parent_window(col_surface, surface_data)
+                col_surface: SurfaceNormal | None = col_x if col_x else col_y
+
+                if col_surface in self.surfaces_to_parent_to:
+                    self._set_parent_window(col_surface, surface_data)
 
             self.mover.set_position(self.transform.anchor.x, self.transform.anchor.y)
             self.click_detector.release()
             self.state_machine.raise_flag(Flag.MOVEMENT_FINISHED)
 
-            # arrived, col_x, col_y = False, False, False
-
-        # print("position is", self.mover.pos.x, self.mover.pos.y)
-        # print("facing is", self.facing)
         t5 = time.perf_counter()
-
-        # print("transform center5 is", self.transform.center)
 
         transition_data, commands = self.state_machine.update(dt)
         if transition_data:
@@ -577,22 +569,16 @@ class Pet(QWidget): # main logic
 
         # --- SYNC PHASE ---
         self._clamp_position_to_screen()
-
         t7 = time.perf_counter()
 
-        # checking if next frame is not the same as current and updating then
         self.animator.update(dt)
         t4 = time.perf_counter()
 
         index = self.animator.index
-
         if not self.prev_frame_index: self.prev_frame_index = index -  1 # kinda useless but lets keep it for now
 
         if index != self.prev_frame_index or self.mover.movement_type == MovementType.DRAG or dx or dy or followed_parent:
             self.update()  # repaint
-
-        # t_update = time.perf_counter()
-        # print("time from parent window to update is", t_update-t_parent)
 
         self.prev_frame_index = index
 
@@ -751,6 +737,7 @@ class Pet(QWidget): # main logic
         self.state_machine.pulse(Pulse.GAINED_PARENT)
 
         if hwnd == self.windowsOverlay.TASKBAR_HWND: 
+            self.parent_window_rect_last = self.windowsOverlay.taskbar_rect
             return
 
         self.parent_window_rect_last = self.windowsOverlay.update_parent_window(hwnd)
@@ -841,6 +828,8 @@ class Pet(QWidget): # main logic
 
         scale = self.scale
 
+        # self.facing = Facing.RIGHT
+
         anchor_x = self.transform.anchor.x
         anchor_y = self.transform.anchor.y
 
@@ -869,8 +858,8 @@ class Pet(QWidget): # main logic
 
         p.translate(anchor_x, anchor_y)
 
-        # p.setPen(QPen(Qt.GlobalColor.blue, 6))
-        # p.drawEllipse(QPointF(0, 0), 2, 2)
+        p.setPen(QPen(Qt.GlobalColor.blue, 6))
+        p.drawEllipse(QPointF(0, 0), 2, 2)
 
         sx = scale
         if self.facing == Facing.LEFT:
@@ -886,15 +875,20 @@ class Pet(QWidget): # main logic
             p.rotate(self.rotation_angle)
             p.translate(-cx, -cy)
 
-        p.scale(sx, self.scale)
+        center_x = width / 2
+        center_y = height / 2
+
+        p.translate(center_x, center_y)
+        p.scale(sx, scale)
+        p.translate(-center_x * scale, -center_y * scale)
 
         p.drawPixmap(int(-offset_x), int(-offset_y), frame)
 
         p.restore()
 
         # draws pets hitbox
-        # p.setPen(QPen(Qt.GlobalColor.red, 6))
-        # p.drawRect(int(self.transform.left), int(self.transform.top), int(self.transform.hitbox_width), int(self.transform.hitbox_height))
+        p.setPen(QPen(Qt.GlobalColor.red, 6))
+        p.drawRect(int(self.transform.left), int(self.transform.top), int(self.transform.hitbox_width), int(self.transform.hitbox_height))
 
         # p.setPen(QPen(Qt.GlobalColor.green, 6))
         # p.drawEllipse(QPointF(0, 0), 2, 2)

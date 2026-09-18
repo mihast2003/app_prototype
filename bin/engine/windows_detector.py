@@ -813,11 +813,20 @@ class WindowsOverlay(QWidget):
 
         # L, T, R, B = data.rect
 
-
         # x must be inside one of the visible top segments
-        if surface_type == SurfaceNormal.UP:
-            if any(x1-buffer <= pos_x <= x2+buffer for x1, x2 in data.top):
-                return True
+        match surface_type:
+            case SurfaceNormal.UP:
+                if any(x1-buffer <= pos_x <= x2+buffer for x1, x2 in data.top):
+                    return True
+            case SurfaceNormal.DOWN:
+                if any(x1-buffer <= pos_x <= x2+buffer for x1, x2 in data.bottom):
+                    return True
+            case SurfaceNormal.LEFT:
+                if any(y1-buffer <= pos_y <= y2+buffer for y1, y2 in data.right):
+                    return True
+            case SurfaceNormal.RIGHT:
+                if any(y1-buffer <= pos_y <= y2+buffer for y1, y2 in data.left):
+                    return True
 
         return False
 
@@ -843,9 +852,7 @@ class WindowsOverlay(QWidget):
         if SurfaceNormal.UP in collision_mask:  # moving down
             for y, x1, x2, hwnd in surfaces.top:
 
-                # print(f"For surface y {y} and x1, x2 {x1, x2} our rect is {pos_x, T, B}")
-
-                if pos_x < x1 or pos_x > x2:   # i replaced R and L with pos.x because we care only about the center point
+                if pos_x < x1 or pos_x > x2:   # replaced R and L with pos_x because we care only about the center point
                     continue
 
                 dist = y - B
@@ -859,7 +866,7 @@ class WindowsOverlay(QWidget):
         if SurfaceNormal.DOWN in collision_mask:  # moving up
             for y, x1, x2, hwnd in surfaces.bottom:
 
-                if pos_x < x1 or pos_x > x2:
+                if pos_x < x1 or pos_x > x2:  # replaced R and L with pos_x because we care only about the center point
                     continue
 
                 dist = y - T
@@ -886,7 +893,7 @@ class WindowsOverlay(QWidget):
         if SurfaceNormal.LEFT in collision_mask:  # moving right
             for x, y1, y2, hwnd in surfaces.left:
 
-                if B < y1 or T > y2:
+                if pos_y < y1 or pos_y > y2:     # replaced B and T with pos_y because we care only about the center point
                     continue
 
                 dist = x - R
@@ -899,7 +906,7 @@ class WindowsOverlay(QWidget):
         if SurfaceNormal.RIGHT in collision_mask:  # moving left
             for x, y1, y2, hwnd in surfaces.right:
 
-                if B < y1 or T > y2:
+                if pos_y < y1 or pos_y > y2:    # replaced R and L with pos_y because we care only about the center point
                     continue
 
                 dist = x - L

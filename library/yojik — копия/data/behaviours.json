@@ -28,7 +28,7 @@
         },
         "movement": "LERP",
         "collide_with_surfaces": "X",
-        "parent_to_surfaces": "all"
+        "parent_to_surfaces": "X"
     },
 
     "MOVE_RANDOM_Y": {
