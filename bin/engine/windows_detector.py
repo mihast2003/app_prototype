@@ -797,7 +797,7 @@ class WindowsOverlay(QWidget):
         L, T, R, B = rect
         return (L / scale, T / scale, R / scale, B / scale)
         
-    def check_parent_window_segment(self, pet: PetTransformData, hwnd, surface_type) -> bool:
+    def check_parent_window_segment(self, pet_transform: PetTransformData, hwnd) -> bool:
         """
         Returns True if pet is on any of the parent_windows' segments
         """
@@ -806,10 +806,10 @@ class WindowsOverlay(QWidget):
         data = self.segments.get(hwnd)
         if not data: return False
 
-        surface_type = pet.parent_surface_type
+        surface_type = pet_transform.parent_surface_type
         if not surface_type: return False
 
-        pos_x, pos_y = pet.anchor
+        pos_x, pos_y = pet_transform.anchor
 
         # L, T, R, B = data.rect
 
@@ -875,6 +875,7 @@ class WindowsOverlay(QWidget):
 
     def collide_horizontal(self, hitbox: PetTransformData, dx, collision_mask: set[SurfaceNormal]):
         L,T,R,B = hitbox.get_rect()
+        pos_x, pos_y = hitbox.center
 
         best: float = dx
         surface_data = None

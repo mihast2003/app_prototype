@@ -133,13 +133,9 @@ class PetTransformData():
         self._calculate_bounaries()
 
     def move(self, dx = None, dy = None):
-        if dx:
-            self.center.x += dx
-        if dy:
-            self.center.y += dy
-
+        if dx:  self.center.x += dx
+        if dy:  self.center.y += dy
         # print("moving to", self.center.x, self.center.y)
-
         self._calculate_bounaries()
 
 
@@ -163,27 +159,6 @@ class PetTransformData():
         self.center.y = new_y + offset_y
 
         # print("set position at", self.center.x, self.center.y, new_parent_surface_type)
-
-        self._calculate_bounaries()
-
-
-    def update(self):
-        offset_x: int = 0
-        offset_y: int = 0
-        
-        match self.parent_surface_type:
-            case SurfaceNormal.LEFT:
-                offset_x = -1 * self.hitbox_width // 2
-            case SurfaceNormal.UP:
-                offset_y = -1 * self.hitbox_height // 2
-            case SurfaceNormal.RIGHT:
-                offset_x = self.hitbox_width // 2
-            case SurfaceNormal.DOWN:
-                offset_y = self.hitbox_height // 2
-
-        self.center.x = self.anchor.x + offset_x
-        self.center.y = self.anchor.y + offset_y
-
         self._calculate_bounaries()
 
 
@@ -192,8 +167,8 @@ class PetTransformData():
         self.top    = self.center.y - self.hitbox_height /2
         self.right  = self.center.x + self.hitbox_width  /2
         self.bottom = self.center.y + self.hitbox_height /2
-
         # print("boundaries are", self.get_rect())
+
 
     def get_rect(self) -> tuple:
         """Returns L, T, R, B of the hitbox"""
