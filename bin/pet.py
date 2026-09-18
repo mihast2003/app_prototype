@@ -839,6 +839,8 @@ class Pet(QWidget): # main logic
         offset_x = 0
         offset_y = 0
 
+        mirror_offset = 0
+
         match self.transform.parent_surface_type:
             case None:
                 offset_x = width/2
@@ -850,6 +852,7 @@ class Pet(QWidget): # main logic
                 offset_x = width/2
             case SurfaceNormal.RIGHT:
                 offset_y = height/2
+                mirror_offset = width/4 # i dont understand why this works
             case SurfaceNormal.LEFT:
                 offset_x = width
                 offset_y = height/2
@@ -875,12 +878,9 @@ class Pet(QWidget): # main logic
             p.rotate(self.rotation_angle)
             p.translate(-cx, -cy)
 
-        center_x = width / 2
-        center_y = height / 2
-
-        p.translate(center_x, center_y)
+        p.translate(mirror_offset, 0)
         p.scale(sx, scale)
-        p.translate(-center_x * scale, -center_y * scale)
+        p.translate(-mirror_offset * scale, 0)
 
         p.drawPixmap(int(-offset_x), int(-offset_y), frame)
 
